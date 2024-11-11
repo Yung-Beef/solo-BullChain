@@ -155,8 +155,11 @@ impl pallet_sudo::Config for Runtime {
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
-/// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
+/// Configure the pallet-bullposting in pallets/bullposting.
+impl pallet_bullposting::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type WeightInfo = pallet_template::weights::SubstrateWeight<Runtime>;
+	type WeightInfo = pallet_bullposting::weights::SubstrateWeight<Runtime>;
+	// TODO: update
+	type Post = [u8; 8];
+	// type Currency = u128;
 }

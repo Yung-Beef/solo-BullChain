@@ -1,4 +1,4 @@
-use crate as pallet_template;
+use crate as pallet_bullposting;
 use frame_support::derive_impl;
 use sp_runtime::BuildStorage;
 
@@ -9,7 +9,7 @@ frame_support::construct_runtime!(
 	pub enum Test
 	{
 		System: frame_system,
-		TemplateModule: pallet_template,
+		BullpostingModule: pallet_bullposting,
 	}
 );
 
@@ -18,9 +18,11 @@ impl frame_system::Config for Test {
 	type Block = Block;
 }
 
-impl pallet_template::Config for Test {
+impl pallet_bullposting::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = ();
+	type Post = [u8; 8];
+	// type Currency = u128;
 }
 
 // Build genesis storage according to the mock runtime.
