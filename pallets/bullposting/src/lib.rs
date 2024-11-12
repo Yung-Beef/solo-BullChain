@@ -36,7 +36,6 @@ pub mod pallet {
 	use codec::{EncodeLike, MaxEncodedLen};
 	use scale_info::{StaticTypeInfo, prelude::fmt::Debug};
 	use frame_support::traits::{Currency, ReservableCurrency, LockableCurrency};
-	use frame_system::WeightInfo;
 
 	// The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
 	// (`Call`s) in this pallet.
