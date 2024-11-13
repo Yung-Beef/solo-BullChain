@@ -34,10 +34,10 @@ pub mod pallet {
 
     // Other imports
     use codec::{EncodeLike, MaxEncodedLen};
-    use frame_support::traits::{WithdrawReasons, tokens::currency::*};
     use frame_support::sp_runtime::traits::Zero;
     use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
     use sp_io::hashing::twox_64;
+    use frame_support::traits::tokens::{fungible::*, Preservation, Fortitude};
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
     // (`Call`s) in this pallet.
@@ -58,11 +58,12 @@ pub mod pallet {
         /// A type representing the post submitted to the chain by a user.
         type Post: MaxEncodedLen + EncodeLike + Decode + StaticTypeInfo + Clone + Debug + PartialEq + Into<[u8; 8]>;
         /// A type representing the token used.
-        type Currency: LockableCurrency<Self::AccountId> + Currency<Self::AccountId>;
+        type Fungible: Inspect<Self::AccountId> + MutateHold<Self::AccountId>;
+        type Reason: From<[u8; 8]>;
     }
 
     type BalanceOf<T> =
-        <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+        <<T as Config>::Fungible as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
     /// Used for the direction of votes and results
     #[derive(Debug, PartialEq, Clone, Encode, Decode, TypeInfo)]
@@ -137,6 +138,7 @@ pub mod pallet {
         NoneValue,
         /// There was an attempt to increment the value in storage over `u32::MAX`.
         StorageOverflow,
+        // TODO: add doc comments
         PostAlreadyExists,
         InsufficientBondableTokens,
         VoteAlreadyClosed,
@@ -210,9 +212,21 @@ pub mod pallet {
             }
         }
 
-        /// Submits a post
-        /// If the post is ultimately voted as bullish, they will get 2x their bond
-        /// If it is voted as bearish, they lose their bond
+        /// Submits a post to the chain for voting.
+        /// If the post is ultimately voted as bullish, they will get 2x their bond.
+        /// If it is voted as bearish, they lose their bond.
+        ///
+        /// It checks that the post has not already been submitted in the past,
+        /// and that the submitter has enough free tokens to bond.
+        ///
+        /// The post is then stored with who submitted it, and their tokens are bonded.
+        ///
+        /// ## Errors
+        ///
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If the post has been submitted previously
+        /// - If the submitter does not have sufficient free tokens to bond
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::default())]
         pub fn submit_post(
@@ -228,7 +242,8 @@ pub mod pallet {
             }
 
             // check if they have enough available to be bonded
-            let free_bal = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::free_balance(&who);
+            let free_bal = <<T as Config>::Fungible as Inspect<<T as frame_system::Config>::AccountId>>::
+            reducible_balance(&who, Preservation::Preserve, Fortitude::Polite);
             if free_bal - bond <= Zero::zero() {
                 return Err(Error::<T>::InsufficientBondableTokens.into())
             }
@@ -238,9 +253,10 @@ pub mod pallet {
 
             // bond the tokens
             let lock = twox_64(&post.into());
-            let reasons = WithdrawReasons::all();
-            <<T as Config>::Currency as LockableCurrency<<T as frame_system::Config>::AccountId>>::
-            set_lock(lock, &who, bond, reasons);
+            let reason: <<T as Config>::Fungible as InspectHold<<T as frame_system::Config>::AccountId>>::Reason = lock.into();
+            
+            <<T as Config>::Fungible as MutateHold<<T as frame_system::Config>::AccountId>>::
+            hold(&reason, &who, bond);
 
             Ok(())
         }

@@ -34,3 +34,14 @@ fn correct_error_for_none_value() {
         );
     });
 }
+
+
+#[test]
+fn test_submit_post() {
+    new_test_ext().execute_with(|| {
+        let alice = "Alice";
+        let post = "TestPost";
+        //force_set_balance(_, alice, 100);
+        //submit_post(RuntimeOrigin::signed(alice), post, 10)
+    });
+}
