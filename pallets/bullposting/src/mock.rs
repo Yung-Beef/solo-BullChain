@@ -11,7 +11,7 @@ frame_support::construct_runtime!(
     {
         System: frame_system,
         Balances: pallet_balances,
-        BullpostingModule: pallet_bullposting,
+        Bullposting: pallet_bullposting,
     }
 );
 

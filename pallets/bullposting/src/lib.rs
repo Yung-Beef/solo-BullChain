@@ -275,8 +275,11 @@ pub mod pallet {
             T::NativeBalance::hold(&HoldReason::Vote.into(), &who, bond)?;
 
             // Stores the submitter and bond info
-            PostSubmitter::<T>::insert(post.clone(), who);
-            PostBond::<T>::insert(post, bond);
+            PostSubmitter::<T>::insert(post.clone(), who.clone());
+            PostBond::<T>::insert(post.clone(), bond);
+
+            // Emit an event.
+            Self::deposit_event(Event::PostSubmitted {post, submitter: who, bond });
 
             Ok(())
         }
