@@ -39,9 +39,11 @@ fn correct_error_for_none_value() {
 #[test]
 fn test_submit_post() {
     new_test_ext().execute_with(|| {
-        let alice = "Alice";
-        let post = "TestPost";
-        //force_set_balance(_, alice, 100);
-        //submit_post(RuntimeOrigin::signed(alice), post, 10)
+        let alice = 0;
+        let post: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+        assert_ok!(Balances::force_set_balance(RuntimeOrigin::signed(0), alice, 100));
+        assert_eq!(Balances::free_balance(alice), 100);
+        assert_ok!(BullpostingModule::submit_post(RuntimeOrigin::signed(alice), post, 10));
+        //assert_eq!(BullpostingModule::PostSubmitter::<mock::Test as pallet_bullposting::Config>::get(post), alice);
     });
 }

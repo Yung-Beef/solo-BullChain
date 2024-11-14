@@ -3,6 +3,8 @@
 // We make sure this pallet uses `no_std` for compiling to Wasm.
 #![cfg_attr(not(feature = "std"), no_std)]
 
+
+
 // Re-export pallet items so that they can be accessed from the crate namespace.
 pub use pallet::*;
 
@@ -36,8 +38,9 @@ pub mod pallet {
     use codec::{EncodeLike, MaxEncodedLen};
     use frame_support::sp_runtime::traits::Zero;
     use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
-    use sp_io::hashing::twox_64;
-    use frame_support::traits::tokens::{fungible::*, Preservation, Fortitude};
+    use frame_support::traits::tokens::{fungible, Preservation, Fortitude};
+    use frame_support::traits::fungible::{Inspect, MutateHold};
+
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
     // (`Call`s) in this pallet.
@@ -55,15 +58,21 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// A type representing the weights required by the dispatchables of this pallet.
         type WeightInfo: WeightInfo;
-        /// A type representing the post submitted to the chain by a user.
-        type Post: MaxEncodedLen + EncodeLike + Decode + StaticTypeInfo + Clone + Debug + PartialEq + Into<[u8; 8]>;
+        /// A type representing the post submitted to the chain by a user. Will likely be hashed by the client from a string.
+        type Post: MaxEncodedLen + EncodeLike + Decode + StaticTypeInfo + Clone + Debug + PartialEq;
         /// A type representing the token used.
-        type Fungible: Inspect<Self::AccountId> + MutateHold<Self::AccountId>;
-        type Reason: From<[u8; 8]>;
+        type NativeBalance: fungible::Inspect<Self::AccountId>
+        + fungible::Mutate<Self::AccountId>
+        + fungible::hold::Inspect<Self::AccountId>
+        + fungible::hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
+        + fungible::freeze::Inspect<Self::AccountId>
+        + fungible::freeze::Mutate<Self::AccountId>;
+
+        type RuntimeHoldReason: From<HoldReason>;
     }
 
     type BalanceOf<T> =
-        <<T as Config>::Fungible as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
+        <<T as Config>::NativeBalance as fungible::Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
     /// Used for the direction of votes and results
     #[derive(Debug, PartialEq, Clone, Encode, Decode, TypeInfo)]
@@ -72,6 +81,13 @@ pub mod pallet {
         Bearish,
     }
 
+    	/// A reason for the pallet contracts placing a hold on funds.
+	#[pallet::composite_enum]
+	pub enum HoldReason {
+        /// Voting
+        Vote,
+	}
+
     /// A storage item for this pallet.
     ///
     /// In this template, we are declaring a storage item called `Something` that stores a single
@@ -79,9 +95,16 @@ pub mod pallet {
     #[pallet::storage]
     pub type Something<T> = StorageValue<_, u32>;
 
+
+    // Stores the submitter of a post
     #[pallet::storage]
-    pub type PostStorage<T: Config> =
+    pub type PostSubmitter<T: Config> =
         StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, T::AccountId>;
+
+    // Stores the amount bonded for the post
+    #[pallet::storage]
+    pub type PostBond<T: Config> =
+        StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, BalanceOf<T>>;
 
     /// Events that functions in this pallet can emit.
     ///
@@ -164,7 +187,7 @@ pub mod pallet {
         /// It checks that the _origin_ for this call is _Signed_ and returns a dispatch
         /// error if it isn't. Learn more about origins here: <https://docs.substrate.io/build/origins/>
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::do_something())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::do_something())]
         pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -193,7 +216,7 @@ pub mod pallet {
         /// - If incrementing the value in storage causes an arithmetic overflow
         ///   ([`Error::StorageOverflow`])
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::cause_error())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::cause_error())]
         pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
             let _who = ensure_signed(origin)?;
 
@@ -236,27 +259,24 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // check if post exists
-            if PostStorage::<T>::contains_key(post.clone()) {
+            // Checks if the post exists
+            if PostSubmitter::<T>::contains_key(post.clone()) {
                 return Err(Error::<T>::PostAlreadyExists.into());
             }
 
-            // check if they have enough available to be bonded
-            let free_bal = <<T as Config>::Fungible as Inspect<<T as frame_system::Config>::AccountId>>::
+            // Checks if they have enough balance available to be bonded
+            let free_bal = <<T as Config>::NativeBalance>::
             reducible_balance(&who, Preservation::Preserve, Fortitude::Polite);
             if free_bal - bond <= Zero::zero() {
                 return Err(Error::<T>::InsufficientBondableTokens.into())
             }
 
-            // store the post
-            PostStorage::<T>::insert(post.clone(), who.clone());
+            // Bonds the balance
+            T::NativeBalance::hold(&HoldReason::Vote.into(), &who, bond)?;
 
-            // bond the tokens
-            let lock = twox_64(&post.into());
-            let reason: <<T as Config>::Fungible as InspectHold<<T as frame_system::Config>::AccountId>>::Reason = lock.into();
-            
-            <<T as Config>::Fungible as MutateHold<<T as frame_system::Config>::AccountId>>::
-            hold(&reason, &who, bond);
+            // Stores the submitter and bond info
+            PostSubmitter::<T>::insert(post.clone(), who);
+            PostBond::<T>::insert(post, bond);
 
             Ok(())
         }
