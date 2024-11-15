@@ -68,6 +68,7 @@ pub mod pallet {
         + fungible::freeze::Inspect<Self::AccountId>
         + fungible::freeze::Mutate<Self::AccountId>;
 
+        /// A type representing the reason an account's tokens are being held.
         type RuntimeHoldReason: From<HoldReason>;
     }
 
@@ -88,6 +89,17 @@ pub mod pallet {
         Vote,
 	}
 
+    // TODO: change i128 to generic, but it needs to be implemented as something bigger than whatever the balance type is
+    #[derive(MaxEncodedLen, Debug, PartialEq, Clone, Encode, Decode, TypeInfo)]
+    #[scale_info(skip_type_params(T))]
+
+    pub struct Post<T: Config> {
+        pub submitter: T::AccountId,
+        pub bond: BalanceOf<T>,
+        pub votes: i128,
+        pub voting_until: BlockNumberFor<T>,
+    }
+
     /// A storage item for this pallet.
     ///
     /// In this template, we are declaring a storage item called `Something` that stores a single
@@ -96,15 +108,10 @@ pub mod pallet {
     pub type Something<T> = StorageValue<_, u32>;
 
 
-    // Stores the submitter of a post
+    /// Stores the submitter of a post
     #[pallet::storage]
-    pub type PostSubmitter<T: Config> =
-        StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, T::AccountId>;
-
-    // Stores the amount bonded for the post
-    #[pallet::storage]
-    pub type PostBond<T: Config> =
-        StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, BalanceOf<T>>;
+    pub type Posts<T: Config> =
+        StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, Post<T>>;
 
     /// Events that functions in this pallet can emit.
     ///
@@ -131,12 +138,13 @@ pub mod pallet {
             post: T::Post,
             submitter: T::AccountId,
             bond: BalanceOf<T>,
+            voting_until: BlockNumberFor<T>,
         },
         /// A user has voted on whether a particular post is bullish or bearish
         VoteSubmitted {
             post: T::Post,
             who: T::AccountId,
-            amount: BalanceOf<T>,
+            vote_amount: BalanceOf<T>,
             direction: Direction,
         },
         /// The vote on a particular post has been closed
@@ -161,9 +169,15 @@ pub mod pallet {
         NoneValue,
         /// There was an attempt to increment the value in storage over `u32::MAX`.
         StorageOverflow,
-        // TODO: add doc comments
+        /// If a post is submitted with a voting period shorter than the period set in the runtime.
+        PeriodTooShort,
+        /// If someone tries to submit a post that has already been submitted.
         PostAlreadyExists,
+        /// If someone tries to submit a post but does not have sufficient free tokens to bond the amount they wanted to bond.
         InsufficientBondableTokens,
+        /// If someone tries to vote on a post that has not been submitted.
+        PostDoesNotExist,
+        /// If someone tries to vote on a post that has already passed the voting period.
         VoteAlreadyClosed,
     }
 
@@ -256,11 +270,12 @@ pub mod pallet {
             origin: OriginFor<T>,
             post: T::Post,
             bond: BalanceOf<T>,
+            voting_period: BlockNumberFor<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             // Checks if the post exists
-            if PostSubmitter::<T>::contains_key(post.clone()) {
+            if Posts::<T>::contains_key(post.clone()) {
                 return Err(Error::<T>::PostAlreadyExists.into());
             }
 
@@ -272,12 +287,49 @@ pub mod pallet {
             // Bonds the balance
             T::NativeBalance::hold(&HoldReason::Vote.into(), &who, bond)?;
 
+            let voting_until = frame_system::Pallet::<T>::block_number() + voting_period;
+
             // Stores the submitter and bond info
-            PostSubmitter::<T>::insert(post.clone(), who.clone());
-            PostBond::<T>::insert(post.clone(), bond);
+            Posts::<T>::insert(post.clone(), Post {
+                submitter: who.clone(),
+                bond,
+                votes: 0,
+                voting_until,
+            });
 
             // Emit an event.
-            Self::deposit_event(Event::PostSubmitted {post, submitter: who, bond });
+            Self::deposit_event(Event::PostSubmitted { post, submitter: who, bond, voting_until });
+
+            Ok(())
+        }
+
+        /// Submits a vote on whether a particular post is bullish or bearish.
+        ///
+        /// ## Errors
+        ///
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If the post has not already been submited
+        /// - If the voting period has already closed
+        #[pallet::call_index(3)]
+        #[pallet::weight(Weight::default())]
+        pub fn submit_vote(
+            origin: OriginFor<T>,
+            post: T::Post,
+            vote_amount: BalanceOf<T>,
+            direction: Direction,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            // Checks if the post exists
+            if !Posts::<T>::contains_key(post.clone()) {
+                return Err(Error::<T>::PostDoesNotExist.into());
+            }
+
+
+            // Stores info
+
+            // Emit an event.
 
             Ok(())
         }

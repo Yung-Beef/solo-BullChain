@@ -47,6 +47,7 @@ fn test_submit_post() {
         let bond = 1000;
         // Existential deposit is 1
         let balance = bond + 1;
+        let voting_period = 5;
 
         // Go past genesis block so events get deposited
         System::set_block_number(1);
@@ -56,16 +57,23 @@ fn test_submit_post() {
         assert_eq!(Balances::reducible_balance(&alice, Preservation::Preserve, Fortitude::Polite), bond);
 
         // Cannot bond more tokens than you have available
-        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond + 1), Error::<Test>::InsufficientBondableTokens);
+        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond + 1, 5), Error::<Test>::InsufficientBondableTokens);
         
         // Call success with storage and event
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond));
-        assert_eq!(crate::PostSubmitter::<Test>::get(post), Some(alice));
+        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond, 5));
+        let testvote = crate::Post {
+            submitter: alice,
+            bond,
+            votes: 0,
+            voting_until: 6,
+        };
+        assert_eq!(crate::Posts::<Test>::get(post), Some(testvote));
         System::assert_last_event(
             Event::PostSubmitted { 
-                post: post, 
+                post, 
                 submitter: alice, 
-                bond: bond,
+                bond,
+                voting_until: System::block_number() + voting_period,
             }.into()
         );
         
@@ -77,6 +85,6 @@ fn test_submit_post() {
         assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), bob, balance));
         assert_eq!(Balances::free_balance(bob), balance);
         assert_eq!(Balances::reducible_balance(&bob, Preservation::Preserve, Fortitude::Polite), bond);
-        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(bob), post, bond), Error::<Test>::PostAlreadyExists);
+        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(bob), post, bond, voting_period), Error::<Test>::PostAlreadyExists);
     });
 }
