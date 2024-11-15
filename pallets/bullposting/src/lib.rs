@@ -36,10 +36,10 @@ pub mod pallet {
 
     // Other imports
     use codec::{EncodeLike, MaxEncodedLen};
-    use frame_support::sp_runtime::traits::Zero;
     use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude};
     use frame_support::traits::fungible::{Inspect, MutateHold};
+    use frame_support::sp_runtime::traits::CheckedSub;
 
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
@@ -267,9 +267,7 @@ pub mod pallet {
             // Checks if they have enough balance available to be bonded
             let free_bal = <<T as Config>::NativeBalance>::
             reducible_balance(&who, Preservation::Preserve, Fortitude::Polite);
-            if free_bal - bond <= Zero::zero() {
-                return Err(Error::<T>::InsufficientBondableTokens.into())
-            }
+            free_bal.checked_sub(&bond).ok_or(Error::<T>::InsufficientBondableTokens)?;
 
             // Bonds the balance
             T::NativeBalance::hold(&HoldReason::Vote.into(), &who, bond)?;

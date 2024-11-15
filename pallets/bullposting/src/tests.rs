@@ -1,5 +1,7 @@
 use crate::{mock::*, Error, Event, Something};
 use frame_support::{assert_noop, assert_ok};
+use frame_support::traits::fungible::Inspect;
+use frame_support::traits::tokens::{Preservation, Fortitude};
 
 #[test]
 fn it_works_for_default_value() {
@@ -40,23 +42,41 @@ fn correct_error_for_none_value() {
 fn test_submit_post() {
     new_test_ext().execute_with(|| {
         let alice = 0;
+        let bob = 1;
         let post: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+        let bond = 1000;
+        // Existential deposit is 1
+        let balance = bond + 1;
 
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), alice, 100));
-        assert_eq!(Balances::free_balance(alice), 100);
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, 10));
+        assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), alice, balance));
+        assert_eq!(Balances::free_balance(alice), balance);
+        assert_eq!(Balances::reducible_balance(&alice, Preservation::Preserve, Fortitude::Polite), bond);
+
+        // Cannot bond more tokens than you have available
+        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond + 1), Error::<Test>::InsufficientBondableTokens);
+        
+        // Call success with storage and event
+        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond));
         assert_eq!(crate::PostSubmitter::<Test>::get(post), Some(alice));
         System::assert_last_event(
             Event::PostSubmitted { 
                 post: post, 
                 submitter: alice, 
-                bond: 10
+                bond: bond,
             }.into()
         );
+        
+        // Tokens bonded
+        assert_eq!(Balances::free_balance(alice), 1);
+        assert_eq!(Balances::reducible_balance(&alice, Preservation::Preserve, Fortitude::Polite), 0);
 
-        // TODO: Add more stuff and then probably split into multiple tests
+        // Cannot resubmit an existing post
+        assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), bob, balance));
+        assert_eq!(Balances::free_balance(bob), balance);
+        assert_eq!(Balances::reducible_balance(&bob, Preservation::Preserve, Fortitude::Polite), bond);
+        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(bob), post, bond), Error::<Test>::PostAlreadyExists);
     });
 }
