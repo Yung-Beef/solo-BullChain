@@ -37,9 +37,10 @@ pub mod pallet {
     // Other imports
     use codec::{EncodeLike, MaxEncodedLen};
     use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
-    use frame_support::traits::tokens::{fungible, Preservation, Fortitude};
-    use frame_support::traits::fungible::{Inspect, MutateHold};
-    use frame_support::sp_runtime::traits::CheckedSub;
+    use frame_support::traits::tokens::{fungible, Preservation, Fortitude, IdAmount};
+    use frame_support::BoundedVec;
+    use frame_support::traits::fungible::{Inspect, MutateHold, InspectFreeze, MutateFreeze};
+    use frame_support::sp_runtime::traits::{CheckedSub, CheckedAdd};
 
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
@@ -66,10 +67,18 @@ pub mod pallet {
         + fungible::hold::Inspect<Self::AccountId>
         + fungible::hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
         + fungible::freeze::Inspect<Self::AccountId>
-        + fungible::freeze::Mutate<Self::AccountId>;
+        + fungible::freeze::Mutate<Self::AccountId, Id = Self::RuntimeFreezeReason>;
 
         /// A type representing the reason an account's tokens are being held.
         type RuntimeHoldReason: From<HoldReason>;
+
+        /// A type representing the reason an account's tokens are being frozen.
+        type RuntimeFreezeReason: From<FreezeReason>;
+        /// The ID type for freezes.
+		type FreezeIdentifier: Parameter + Member + MaxEncodedLen + Copy;
+        /// The maximum number of individual freeze locks that can exist on an account at any time.
+		#[pallet::constant]
+		type MaxFreezes: Get<u32>;
     }
 
     type BalanceOf<T> =
@@ -82,9 +91,16 @@ pub mod pallet {
         Bearish,
     }
 
-    	/// A reason for the pallet contracts placing a hold on funds.
+    /// A reason for the pallet placing a hold on funds.
 	#[pallet::composite_enum]
 	pub enum HoldReason {
+        /// Submitting a post
+        PostBond,
+	}
+
+    /// A reason for the pallet freezing funds.
+	#[pallet::composite_enum]
+	pub enum FreezeReason {
         /// Voting
         Vote,
 	}
@@ -112,6 +128,16 @@ pub mod pallet {
     #[pallet::storage]
     pub type Posts<T: Config> =
         StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, Post<T>>;
+
+    /// Freeze locks on account balances.
+	#[pallet::storage]
+	pub type Freezes<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		T::AccountId,
+		BoundedVec<IdAmount<T::FreezeIdentifier, T::NativeBalance>, T::MaxFreezes>,
+		ValueQuery,
+	>;
 
     /// Events that functions in this pallet can emit.
     ///
@@ -174,11 +200,13 @@ pub mod pallet {
         /// If someone tries to submit a post that has already been submitted.
         PostAlreadyExists,
         /// If someone tries to submit a post but does not have sufficient free tokens to bond the amount they wanted to bond.
-        InsufficientBondableTokens,
+        InsufficientBalance,
         /// If someone tries to vote on a post that has not been submitted.
         PostDoesNotExist,
         /// If someone tries to vote on a post that has already passed the voting period.
         VoteAlreadyClosed,
+        /// If there is an overflow while doing checked_add().
+        Overflow,
     }
 
     /// The pallet's dispatchable functions ([`Call`]s).
@@ -276,16 +304,16 @@ pub mod pallet {
 
             // Checks if the post exists
             if Posts::<T>::contains_key(post.clone()) {
-                return Err(Error::<T>::PostAlreadyExists.into());
+                return Err(Error::<T>::PostAlreadyExists.into())
             }
 
             // Checks if they have enough balance available to be bonded
-            let free_bal = <<T as Config>::NativeBalance>::
+            let reduc_bal = <<T as Config>::NativeBalance>::
             reducible_balance(&who, Preservation::Preserve, Fortitude::Polite);
-            free_bal.checked_sub(&bond).ok_or(Error::<T>::InsufficientBondableTokens)?;
+            reduc_bal.checked_sub(&bond).ok_or(Error::<T>::InsufficientBalance)?;
 
             // Bonds the balance
-            T::NativeBalance::hold(&HoldReason::Vote.into(), &who, bond)?;
+            T::NativeBalance::hold(&HoldReason::PostBond.into(), &who, bond)?;
 
             let voting_until = frame_system::Pallet::<T>::block_number() + voting_period;
 
@@ -309,7 +337,8 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
-        /// - If the post has not already been submited
+        /// - If that post does not exist
+        /// - If the user tries to vote with more than their balance
         /// - If the voting period has already closed
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::default())]
@@ -321,11 +350,25 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // Checks if the post exists
+            // Error if the post does not exist.
             if !Posts::<T>::contains_key(post.clone()) {
-                return Err(Error::<T>::PostDoesNotExist.into());
+                return Err(Error::<T>::PostDoesNotExist.into())
             }
 
+            // Check if voting is still open for that post
+            let post_struct = Posts::<T>::get(post.clone()).expect("Already checked that it exists");
+            // If current block number is higher than the ending period of the post's voting, error.
+            if frame_system::Pallet::<T>::block_number() > post_struct.voting_until {
+                return Err(Error::<T>::VoteAlreadyClosed.into())
+            }
+
+            // Error if they do not have enough balance for the freeze
+            if vote_amount > <<T as Config>::NativeBalance>::total_balance(&who) {
+                return Err(Error::<T>::InsufficientBalance.into())
+            };
+
+            // extend_freeze
+            <<T as Config>::NativeBalance>::extend_freeze(&FreezeReason::Vote.into(), &who, vote_amount)?;
 
             // Stores info
 
