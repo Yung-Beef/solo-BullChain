@@ -37,8 +37,8 @@ pub mod pallet {
     // Other imports
     use codec::{EncodeLike, MaxEncodedLen};
     use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
-    use frame_support::traits::tokens::{fungible, Preservation, Fortitude, IdAmount};
-    use frame_support::traits::fungible::{Inspect, MutateHold, MutateFreeze};
+    use frame_support::traits::tokens::{fungible, Preservation, Fortitude, IdAmount, Precision};
+    use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
     use frame_support::BoundedVec;
     use frame_support::sp_runtime::traits::{CheckedSub, Zero};
 
@@ -104,16 +104,15 @@ pub mod pallet {
         Vote,
 	}
 
-    // TODO: change i128 to generic, but it needs to be implemented as something bigger than whatever the balance type is
     #[derive(MaxEncodedLen, Debug, PartialEq, Clone, Encode, Decode, TypeInfo)]
     #[scale_info(skip_type_params(T))]
-
     pub struct Post<T: Config> {
         pub submitter: T::AccountId,
         pub bond: BalanceOf<T>,
         pub bull_votes: BalanceOf<T>,
         pub bear_votes: BalanceOf<T>,
         pub voting_until: BlockNumberFor<T>,
+        pub resolved: bool,
     }
 
     /// Stores the post ID as the key and a post struct (with the additional info such as the submitter) as the value
@@ -121,6 +120,9 @@ pub mod pallet {
     pub type Posts<T: Config> =
         StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, Post<T>>;
 
+    // TODO: CHANGE TO BE FREEZE LOCKS PER POST
+    // USE A VEC(ACCOUNTID, VOTE) FOR THE VALUE IN THE MAP AND ADD A MINIMUM VOTE SIZE
+    // OR PUT ANOTHER MAP INSIDE OF THIS MAP AS THE VALUE???
     /// Stores the freeze locks per account.
 	#[pallet::storage]
 	pub type Freezes<T: Config> = StorageMap<
@@ -225,6 +227,7 @@ pub mod pallet {
         /// Submits a post to the chain for voting.
         /// If the post is ultimately voted as bullish, they will get 2x their bond.
         /// If it is voted as bearish, they lose their bond.
+        /// If there is a tie, their tokens are simply unlocked.
         ///
         /// It checks that the post has not already been submitted in the past,
         /// and that the submitter has enough free tokens to bond.
@@ -270,6 +273,7 @@ pub mod pallet {
                 bull_votes: Zero::zero(),
                 bear_votes: Zero::zero(),
                 voting_until,
+                resolved: false,
             });
 
             // Emit an event.
@@ -347,8 +351,8 @@ pub mod pallet {
         }
 
 
-        /// Resolves a vote, rewarding or slashing the submitter and unfreezing voted tokens
-        /// Callable by anyone
+        /// Resolves a vote, rewarding or slashing the submitter and unfreezing voted tokens.
+        /// Callable by anyone.
         ///
         /// ## Errors
         ///
@@ -359,8 +363,55 @@ pub mod pallet {
         /// - If the vote has already been resolved ([`Error::VoteAlreadyResolved`])
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::default())]
-        pub fn resolve_vote(origin: OriginFor<T>) -> DispatchResult {
+        pub fn resolve_vote(origin: OriginFor<T>, post: T::Post) -> DispatchResult {
             let who = ensure_signed(origin)?;
+
+            // Error if the post does not exist.
+            if !Posts::<T>::contains_key(post.clone()) {
+                return Err(Error::<T>::PostDoesNotExist.into())
+            }
+
+            // Check if the voting period is over for that post
+            let post_struct = Posts::<T>::get(post.clone()).expect("Already checked that it exists");
+            // If current block number is lower than the ending period of the post's voting, voting has not ended; error.
+            if frame_system::Pallet::<T>::block_number() < post_struct.voting_until {
+                return Err(Error::<T>::VoteStillOngoing.into())
+            }
+
+            // Error if already resolved.
+            if post_struct.resolved == true {
+                return Err(Error::<T>::VoteAlreadyResolved.into())
+            }
+
+            // Resolve the vote and update storage
+            let updated_post_struct = Post {
+                resolved: true,
+                ..post_struct
+            };
+            Posts::<T>::insert(post, updated_post_struct.clone());
+
+            // Reward/slash amount
+            let amount = post_struct.bond;
+
+            // Unlock submitter's bond
+            T::NativeBalance::release(&HoldReason::PostBond.into(), &who, amount, Precision::BestEffort)?;
+
+            // Reward/slash submitter or do nothing if there is a tie
+            if updated_post_struct.bull_votes > updated_post_struct.bear_votes {
+                // Reward the submitter
+                T::NativeBalance::mint_into(&who, amount)?;
+            } else {
+                // Slashes the submitter
+                T::NativeBalance::burn_from(&who, amount, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+            }
+
+            // unfreeze votes
+            // SEE TODO ABOVE BY POSTS STORAGE
+
+
+
+            //Self::deposit_event(event);
+
             Ok(())
         }
     }
