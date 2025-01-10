@@ -38,9 +38,9 @@ pub mod pallet {
     use codec::{EncodeLike, MaxEncodedLen};
     use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, IdAmount};
-    use frame_support::traits::fungible::{Inspect, MutateHold, InspectFreeze, MutateFreeze};
+    use frame_support::traits::fungible::{Inspect, MutateHold, MutateFreeze};
     use frame_support::BoundedVec;
-    use frame_support::sp_runtime::traits::{CheckedSub, CheckedAdd};
+    use frame_support::sp_runtime::traits::{CheckedSub, Zero};
 
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
@@ -111,18 +111,10 @@ pub mod pallet {
     pub struct Post<T: Config> {
         pub submitter: T::AccountId,
         pub bond: BalanceOf<T>,
-        pub votes: i128,
+        pub bull_votes: BalanceOf<T>,
+        pub bear_votes: BalanceOf<T>,
         pub voting_until: BlockNumberFor<T>,
     }
-
-    // TODO: REMOVE EXAMPLE
-    /// A storage item for this pallet.
-    ///
-    /// In this template, we are declaring a storage item called `Something` that stores a single
-    /// `u32` value. Learn more about runtime storage here: <https://docs.substrate.io/build/runtime-storage/>
-    #[pallet::storage]
-    pub type Something<T> = StorageValue<_, u32>;
-
 
     /// Stores the post ID as the key and a post struct (with the additional info such as the submitter) as the value
     #[pallet::storage]
@@ -152,33 +144,38 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        // TODO: REMOVE EXAMPLE
-        /// A user has successfully set a new value.
-        SomethingStored {
-            /// The new value set.
-            something: u32,
-            /// The account who set the new value.
-            who: T::AccountId,
-        },
-        /// A user has submitted a post to the chain
+        /// Post submitted successfully.
         PostSubmitted {
+            /// The post ID.
             post: T::Post,
+            /// The account that submitted the post and bonded tokens.
             submitter: T::AccountId,
+            /// Amount of bonded tokens.
             bond: BalanceOf<T>,
+            /// Duration of voting period.
             voting_until: BlockNumberFor<T>,
         },
-        /// A user has voted on whether a particular post is bullish or bearish
+        /// Vote submitted successfully.
         VoteSubmitted {
+            /// The post ID.
             post: T::Post,
+            /// The account voting on the post.
             voter: T::AccountId,
+            /// The amount of tokens frozen for the vote.
             vote_amount: BalanceOf<T>,
+            /// Bullish or bearish vote.
             direction: Direction,
         },
-        /// The vote on a particular post has been closed
-        VoteClosed {
+        /// Vote closed and resolved, unlocking voted tokens and rewarding or slashing the submitter.
+        VoteResolved {
+            /// The post ID.
             post: T::Post,
+            /// The account that submitted the post and bonded tokens.
             submitter: T::AccountId,
+            /// Bullish means the submitter was rewarded, Bearish means they were slashed
             result: Direction,
+            rewarded: BalanceOf<T>,
+            slashed: BalanceOf<T>,
         },
     }
 
@@ -192,22 +189,19 @@ pub mod pallet {
     /// information.
     #[pallet::error]
     pub enum Error<T> {
-        // TODO: REMOVE EXAMPLE
-        /// The value retrieved was `None` as no value was previously set.
-        NoneValue,
-        // TODO: REMOVE EXAMPLE
-        /// There was an attempt to increment the value in storage over `u32::MAX`.
-        StorageOverflow,
-        /// If a post is submitted with a voting period shorter than the period set in the runtime.
+        /// The voting period was too short.
         PeriodTooShort,
-        /// If someone tries to submit a post that has already been submitted.
+        /// Post already submitted.
         PostAlreadyExists,
-        /// If someone tries to submit a post but does not have sufficient free tokens to bond the amount they wanted to bond.
+        /// TODO: MAKE 1 ERROR FOR HOLD AND 1 FOR FREEZE
+        /// Insufficient available balance.
         InsufficientFreeBalance,
-        /// If someone tries to vote on a post that has not been submitted.
+        /// Post has not been submitted.
         PostDoesNotExist,
-        /// If someone tries to vote on a post that has already passed the voting period.
-        VoteAlreadyClosed,
+        /// Vote still in progress.
+        VoteStillOngoing,
+        /// Vote already closed and resolved.
+        VoteAlreadyResolved,
         // TODO: SHOULD BE HANDLED BETTER SOMEHOW?
         /// If there is an overflow while doing checked_add().
         Overflow,
@@ -227,62 +221,6 @@ pub mod pallet {
     /// The [`weight`] macro is used to assign a weight to each call.
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        // TODO: REMOVE EXAMPLE
-        /// An example dispatchable that takes a single u32 value as a parameter, writes the value
-        /// to storage and emits an event.
-        ///
-        /// It checks that the _origin_ for this call is _Signed_ and returns a dispatch
-        /// error if it isn't. Learn more about origins here: <https://docs.substrate.io/build/origins/>
-        #[pallet::call_index(0)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::do_something())]
-        pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-            // Check that the extrinsic was signed and get the signer.
-            let who = ensure_signed(origin)?;
-
-            // Update storage.
-            Something::<T>::put(something);
-
-            // Emit an event.
-            Self::deposit_event(Event::SomethingStored { something, who });
-
-            // Return a successful `DispatchResult`
-            Ok(())
-        }
-
-        // TODO: REMOVE EXAMPLE
-        /// An example dispatchable that may throw a custom error.
-        ///
-        /// It checks that the caller is a signed origin and reads the current value from the
-        /// `Something` storage item. If a current value exists, it is incremented by 1 and then
-        /// written back to storage.
-        ///
-        /// ## Errors
-        ///
-        /// The function will return an error under the following conditions:
-        ///
-        /// - If no value has been set ([`Error::NoneValue`])
-        /// - If incrementing the value in storage causes an arithmetic overflow
-        ///   ([`Error::StorageOverflow`])
-        #[pallet::call_index(1)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::cause_error())]
-        pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-
-            // Read a value from storage.
-            match Something::<T>::get() {
-                // Return an error if the value has not been set.
-                None => Err(Error::<T>::NoneValue.into()),
-                Some(old) => {
-                    // Increment the value read from storage. This will cause an error in the event
-                    // of overflow.
-                    let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-                    // Update the value in storage with the incremented result.
-                    Something::<T>::put(new);
-                    Ok(())
-                }
-            }
-        }
-
         // TODO: CHANGE 2X THEIR BOND INTO A GENERIC SO IT'S CONFIGURABLE
         /// Submits a post to the chain for voting.
         /// If the post is ultimately voted as bullish, they will get 2x their bond.
@@ -299,7 +237,7 @@ pub mod pallet {
         ///
         /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
         /// - If the submitter does not have sufficient free tokens to bond ([`Error::InsufficientFreeBalance`])
-        #[pallet::call_index(2)]
+        #[pallet::call_index(0)]
         #[pallet::weight(Weight::default())]
         pub fn submit_post(
             origin: OriginFor<T>,
@@ -329,7 +267,8 @@ pub mod pallet {
             Posts::<T>::insert(post.clone(), Post {
                 submitter: who.clone(),
                 bond,
-                votes: 0,
+                bull_votes: Zero::zero(),
+                bear_votes: Zero::zero(),
                 voting_until,
             });
 
@@ -345,10 +284,10 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
-        /// - If that post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the voting period has already closed ([`Error::VoteAlreadyClosed`])
+        /// - If the post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the voting period has already closed ([`Error::VoteAlreadyResolved`])
         /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
-        #[pallet::call_index(3)]
+        #[pallet::call_index(1)]
         #[pallet::weight(Weight::default())]
         pub fn submit_vote(
             origin: OriginFor<T>,
@@ -367,7 +306,7 @@ pub mod pallet {
             let post_struct = Posts::<T>::get(post.clone()).expect("Already checked that it exists");
             // If current block number is higher than the ending period of the post's voting, error.
             if frame_system::Pallet::<T>::block_number() > post_struct.voting_until {
-                return Err(Error::<T>::VoteAlreadyClosed.into())
+                return Err(Error::<T>::VoteAlreadyResolved.into())
             }
 
             // Error if they do not have enough balance for the freeze
@@ -378,14 +317,50 @@ pub mod pallet {
             // Extend_freeze
             <<T as Config>::NativeBalance>::extend_freeze(&FreezeReason::Vote.into(), &who, vote_amount)?;
 
-            // Stores vote info/updates post struct
-            vote = match direction {
-                Direction::Bullish => vote_amount,
-                Direction::Bearish => vote_amount,
-            }
+            // Stores vote info/updates post struct according to vote direction
+            let updated_post_struct = match direction {
+                Direction::Bullish => {
+                    Post {
+                        bull_votes: post_struct.bull_votes + vote_amount,
+                        ..post_struct
+                    }
+                },
+                Direction::Bearish => {
+                    Post {
+                        bear_votes: post_struct.bear_votes + vote_amount,
+                        ..post_struct
+                    }
+                },
+            };
+
+            Posts::<T>::insert(post.clone(), updated_post_struct);
 
             // Emit an event.
+            Self::deposit_event(Event::VoteSubmitted {
+                post,
+                voter: who,
+                vote_amount,
+                direction,
+            });
 
+            Ok(())
+        }
+
+
+        /// Resolves a vote, rewarding or slashing the submitter and unfreezing voted tokens
+        /// Callable by anyone
+        ///
+        /// ## Errors
+        ///
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If the post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the vote is still in progress ([`Error::VoteStillOngoing`])
+        /// - If the vote has already been resolved ([`Error::VoteAlreadyResolved`])
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::default())]
+        pub fn resolve_vote(origin: OriginFor<T>) -> DispatchResult {
+            let who = ensure_signed(origin)?;
             Ok(())
         }
     }
