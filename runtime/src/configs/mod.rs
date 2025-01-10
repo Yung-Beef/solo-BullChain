@@ -156,10 +156,12 @@ impl pallet_sudo::Config for Runtime {
 }
 
 /// Configure the pallet-bullposting in pallets/bullposting.
-impl pallet_bullposting::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type WeightInfo = pallet_bullposting::weights::SubstrateWeight<Runtime>;
-    // TODO: update
-    type Post = [u8; 8];
-    // type Currency = u128;
-}
+// impl pallet_bullposting::Config for Runtime {
+//     type RuntimeEvent = RuntimeEvent;
+//     type WeightInfo = pallet_bullposting::weights::SubstrateWeight<Runtime>;
+//     // TODO: update
+//     type Post = [u8; 8];
+//     // type Currency = u128;
+//     type NativeBalance = u128;
+//     type RuntimeHoldReason = RuntimeHoldReason;
+// }

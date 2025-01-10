@@ -57,7 +57,7 @@ fn test_submit_post() {
         assert_eq!(Balances::reducible_balance(&alice, Preservation::Preserve, Fortitude::Polite), bond);
 
         // Cannot bond more tokens than you have available
-        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond + 1, 5), Error::<Test>::InsufficientBondableTokens);
+        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond + 1, 5), Error::<Test>::InsufficientFreeBalance);
         
         // Call success with storage and event
         assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post, bond, 5));

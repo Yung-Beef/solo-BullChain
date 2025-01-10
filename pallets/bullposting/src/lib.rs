@@ -38,8 +38,8 @@ pub mod pallet {
     use codec::{EncodeLike, MaxEncodedLen};
     use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, IdAmount};
-    use frame_support::BoundedVec;
     use frame_support::traits::fungible::{Inspect, MutateHold, InspectFreeze, MutateFreeze};
+    use frame_support::BoundedVec;
     use frame_support::sp_runtime::traits::{CheckedSub, CheckedAdd};
 
 
@@ -71,7 +71,6 @@ pub mod pallet {
 
         /// A type representing the reason an account's tokens are being held.
         type RuntimeHoldReason: From<HoldReason>;
-
         /// A type representing the reason an account's tokens are being frozen.
         type RuntimeFreezeReason: From<FreezeReason>;
         /// The ID type for freezes.
@@ -116,6 +115,7 @@ pub mod pallet {
         pub voting_until: BlockNumberFor<T>,
     }
 
+    // TODO: REMOVE EXAMPLE
     /// A storage item for this pallet.
     ///
     /// In this template, we are declaring a storage item called `Something` that stores a single
@@ -124,18 +124,18 @@ pub mod pallet {
     pub type Something<T> = StorageValue<_, u32>;
 
 
-    /// Stores the submitter of a post
+    /// Stores the post ID as the key and a post struct (with the additional info such as the submitter) as the value
     #[pallet::storage]
     pub type Posts<T: Config> =
         StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, Post<T>>;
 
-    /// Freeze locks on account balances.
+    /// Stores the freeze locks per account.
 	#[pallet::storage]
 	pub type Freezes<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
 		T::AccountId,
-		BoundedVec<IdAmount<T::FreezeIdentifier, T::NativeBalance>, T::MaxFreezes>,
+		BoundedVec<IdAmount<T::FreezeIdentifier, BalanceOf<T>>, T::MaxFreezes>,
 		ValueQuery,
 	>;
 
@@ -152,6 +152,7 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        // TODO: REMOVE EXAMPLE
         /// A user has successfully set a new value.
         SomethingStored {
             /// The new value set.
@@ -169,7 +170,7 @@ pub mod pallet {
         /// A user has voted on whether a particular post is bullish or bearish
         VoteSubmitted {
             post: T::Post,
-            who: T::AccountId,
+            voter: T::AccountId,
             vote_amount: BalanceOf<T>,
             direction: Direction,
         },
@@ -191,8 +192,10 @@ pub mod pallet {
     /// information.
     #[pallet::error]
     pub enum Error<T> {
+        // TODO: REMOVE EXAMPLE
         /// The value retrieved was `None` as no value was previously set.
         NoneValue,
+        // TODO: REMOVE EXAMPLE
         /// There was an attempt to increment the value in storage over `u32::MAX`.
         StorageOverflow,
         /// If a post is submitted with a voting period shorter than the period set in the runtime.
@@ -200,11 +203,12 @@ pub mod pallet {
         /// If someone tries to submit a post that has already been submitted.
         PostAlreadyExists,
         /// If someone tries to submit a post but does not have sufficient free tokens to bond the amount they wanted to bond.
-        InsufficientBalance,
+        InsufficientFreeBalance,
         /// If someone tries to vote on a post that has not been submitted.
         PostDoesNotExist,
         /// If someone tries to vote on a post that has already passed the voting period.
         VoteAlreadyClosed,
+        // TODO: SHOULD BE HANDLED BETTER SOMEHOW?
         /// If there is an overflow while doing checked_add().
         Overflow,
     }
@@ -223,6 +227,7 @@ pub mod pallet {
     /// The [`weight`] macro is used to assign a weight to each call.
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        // TODO: REMOVE EXAMPLE
         /// An example dispatchable that takes a single u32 value as a parameter, writes the value
         /// to storage and emits an event.
         ///
@@ -244,6 +249,7 @@ pub mod pallet {
             Ok(())
         }
 
+        // TODO: REMOVE EXAMPLE
         /// An example dispatchable that may throw a custom error.
         ///
         /// It checks that the caller is a signed origin and reads the current value from the
@@ -277,6 +283,7 @@ pub mod pallet {
             }
         }
 
+        // TODO: CHANGE 2X THEIR BOND INTO A GENERIC SO IT'S CONFIGURABLE
         /// Submits a post to the chain for voting.
         /// If the post is ultimately voted as bullish, they will get 2x their bond.
         /// If it is voted as bearish, they lose their bond.
@@ -290,8 +297,8 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
-        /// - If the post has been submitted previously
-        /// - If the submitter does not have sufficient free tokens to bond
+        /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
+        /// - If the submitter does not have sufficient free tokens to bond ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::default())]
         pub fn submit_post(
@@ -302,6 +309,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
+            // TODO: CHECK IF POST NEEDS TO BE CLONED OR CAN BE REFERENCED
             // Checks if the post exists
             if Posts::<T>::contains_key(post.clone()) {
                 return Err(Error::<T>::PostAlreadyExists.into())
@@ -310,7 +318,7 @@ pub mod pallet {
             // Checks if they have enough balance available to be bonded
             let reduc_bal = <<T as Config>::NativeBalance>::
             reducible_balance(&who, Preservation::Preserve, Fortitude::Polite);
-            reduc_bal.checked_sub(&bond).ok_or(Error::<T>::InsufficientBalance)?;
+            reduc_bal.checked_sub(&bond).ok_or(Error::<T>::InsufficientFreeBalance)?;
 
             // Bonds the balance
             T::NativeBalance::hold(&HoldReason::PostBond.into(), &who, bond)?;
@@ -337,9 +345,9 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
-        /// - If that post does not exist
-        /// - If the user tries to vote with more than their balance
-        /// - If the voting period has already closed
+        /// - If that post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the voting period has already closed ([`Error::VoteAlreadyClosed`])
+        /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::default())]
         pub fn submit_vote(
@@ -364,13 +372,17 @@ pub mod pallet {
 
             // Error if they do not have enough balance for the freeze
             if vote_amount > <<T as Config>::NativeBalance>::total_balance(&who) {
-                return Err(Error::<T>::InsufficientBalance.into())
+                return Err(Error::<T>::InsufficientFreeBalance.into())
             };
 
-            // extend_freeze
+            // Extend_freeze
             <<T as Config>::NativeBalance>::extend_freeze(&FreezeReason::Vote.into(), &who, vote_amount)?;
 
-            // Stores info
+            // Stores vote info/updates post struct
+            vote = match direction {
+                Direction::Bullish => vote_amount,
+                Direction::Bearish => vote_amount,
+            }
 
             // Emit an event.
 
