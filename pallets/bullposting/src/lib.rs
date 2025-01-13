@@ -41,8 +41,6 @@ pub mod pallet {
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
     use frame_support::BoundedVec;
     use frame_support::sp_runtime::traits::{CheckedSub, Zero};
-    use frame_support::sp_runtime::traits::BlockNumber;
-    use frame_support::traits::Time;
 
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
@@ -71,8 +69,6 @@ pub mod pallet {
         + fungible::freeze::Inspect<Self::AccountId>
         + fungible::freeze::Mutate<Self::AccountId, Id = Self::RuntimeFreezeReason>;
 
-        /// Lets the runtime configure how long votes will last.
-        type VotingPeriod: Moment;
         /// A type representing the reason an account's tokens are being held.
         type RuntimeHoldReason: From<HoldReason>;
         /// A type representing the reason an account's tokens are being frozen.
@@ -250,6 +246,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             post: T::Post,
             bond: BalanceOf<T>,
+            voting_period: BlockNumberFor<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -267,7 +264,7 @@ pub mod pallet {
             // Bonds the balance
             T::NativeBalance::hold(&HoldReason::PostBond.into(), &who, bond)?;
 
-            let voting_until = frame_system::Pallet::<T>::block_number() + T::VotingPeriod;
+            let voting_until = frame_system::Pallet::<T>::block_number() + voting_period;
 
             // Stores the submitter and bond info
             Posts::<T>::insert(post.clone(), Post {
@@ -278,8 +275,6 @@ pub mod pallet {
                 voting_until,
                 resolved: false,
             });
-
-            let vote_end = 
 
             // Emit an event.
             Self::deposit_event(Event::PostSubmitted { post, submitter: who, bond, voting_until });
