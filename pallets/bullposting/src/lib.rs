@@ -71,8 +71,7 @@ pub mod pallet {
         + fungible::freeze::Inspect<Self::AccountId>
         + fungible::freeze::Mutate<Self::AccountId, Id = Self::RuntimeFreezeReason>;
 
-        /// Lets the runtime configure how long votes will last.
-        type VotingPeriod: Moment;
+
         /// A type representing the reason an account's tokens are being held.
         type RuntimeHoldReason: From<HoldReason>;
         /// A type representing the reason an account's tokens are being frozen.
@@ -82,6 +81,9 @@ pub mod pallet {
         /// The maximum number of individual freeze locks that can exist on an account at any time.
 		#[pallet::constant]
 		type MaxFreezes: Get<u32>;
+        /// Lets the runtime configure how long votes will last.
+        #[pallet::constant]
+        type VotingPeriod: Get<u32> + Into<BlockNumberFor<Self>>;
     }
 
     type BalanceOf<T> =
@@ -267,7 +269,7 @@ pub mod pallet {
             // Bonds the balance
             T::NativeBalance::hold(&HoldReason::PostBond.into(), &who, bond)?;
 
-            let voting_until = frame_system::Pallet::<T>::block_number() + T::VotingPeriod;
+            let voting_until = frame_system::Pallet::<T>::block_number() + T::VotingPeriod.into();
 
             // Stores the submitter and bond info
             Posts::<T>::insert(post.clone(), Post {
