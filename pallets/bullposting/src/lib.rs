@@ -37,9 +37,8 @@ pub mod pallet {
     // Other imports
     use codec::{EncodeLike, MaxEncodedLen};
     use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
-    use frame_support::traits::tokens::{fungible, Preservation, Fortitude, IdAmount, Precision};
+    use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
-    use frame_support::BoundedVec;
     use frame_support::sp_runtime::traits::{CheckedSub, Zero};
 
 
@@ -78,14 +77,19 @@ pub mod pallet {
         /// The maximum number of individual freeze locks that can exist on an account at any time.
 		#[pallet::constant]
 		type MaxFreezes: Get<u32>;
+
+        // TODO: FIGURE OUT HOW TO SET A CONSTANT VOTING PERIOD
+
+
     }
 
     type BalanceOf<T> =
         <<T as Config>::NativeBalance as fungible::Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
     /// Used for the direction of votes and results
-    #[derive(Debug, PartialEq, Clone, Encode, Decode, TypeInfo)]
+    #[derive(Debug, PartialEq, Clone, Encode, Decode, TypeInfo, Default, MaxEncodedLen)]
     pub enum Direction {
+        #[default]
         Bullish,
         Bearish,
     }
@@ -120,18 +124,18 @@ pub mod pallet {
     pub type Posts<T: Config> =
         StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, Post<T>>;
 
-    // TODO: CHANGE TO BE FREEZE LOCKS PER POST
-    // USE A VEC(ACCOUNTID, VOTE) FOR THE VALUE IN THE MAP AND ADD A MINIMUM VOTE SIZE
-    // OR PUT ANOTHER MAP INSIDE OF THIS MAP AS THE VALUE???
-    /// Stores the freeze locks per account.
-	#[pallet::storage]
-	pub type Freezes<T: Config> = StorageMap<
-		_,
-		Blake2_128Concat,
-		T::AccountId,
-		BoundedVec<IdAmount<T::FreezeIdentifier, BalanceOf<T>>, T::MaxFreezes>,
-		ValueQuery,
-	>;
+    
+    /// Stores the vote size per account and post
+    #[pallet::storage]
+    pub type Votes<T: Config> = StorageDoubleMap<
+    _,
+    Blake2_128Concat,
+    T::AccountId,
+    Blake2_128Concat,
+    Post<T>,
+    (BalanceOf<T>, Direction),
+    ValueQuery,
+    >;
 
     /// Events that functions in this pallet can emit.
     ///
@@ -168,8 +172,19 @@ pub mod pallet {
             /// Bullish or bearish vote.
             direction: Direction,
         },
+        /// Vote updated successfully.
+        VoteUpdated {
+            /// The post ID.
+            post: T::Post,
+            /// The account voting on the post.
+            voter: T::AccountId,
+            /// The amount of tokens frozen for the vote.
+            vote_amount: BalanceOf<T>,
+            /// Bullish or bearish vote.
+            direction: Direction,
+        },
         /// Vote closed and resolved, unlocking voted tokens and rewarding or slashing the submitter.
-        VoteResolved {
+        PostResolved {
             /// The post ID.
             post: T::Post,
             /// The account that submitted the post and bonded tokens.
@@ -179,6 +194,11 @@ pub mod pallet {
             rewarded: BalanceOf<T>,
             slashed: BalanceOf<T>,
         },
+        VoteUnfrozen {
+            post: T::Post,
+            account: T::AccountId,
+            amount: BalanceOf<T>,
+        }
     }
 
     /// Errors that can be returned by this pallet.
@@ -200,10 +220,16 @@ pub mod pallet {
         InsufficientFreeBalance,
         /// Post has not been submitted.
         PostDoesNotExist,
+        /// Account already voted on a particular post
+        AlreadyVoted,
+        /// If you try to unfreeze a vote that was already unfrozen or never happened in the first place.
+        VoteDoesNotExist,
         /// Vote still in progress.
-        VoteStillOngoing,
+        VotingStillOngoing,
+        /// Voting has ended but nobody has called resolve() yet.
+        PostUnresolved,
         /// Vote already closed and resolved.
-        VoteAlreadyResolved,
+        PostAlreadyResolved,
         // TODO: SHOULD BE HANDLED BETTER SOMEHOW?
         /// If there is an overflow while doing checked_add().
         Overflow,
@@ -252,7 +278,7 @@ pub mod pallet {
 
             // TODO: CHECK IF POST NEEDS TO BE CLONED OR CAN BE REFERENCED
             // Checks if the post exists
-            if Posts::<T>::contains_key(post.clone()) {
+            if Posts::<T>::contains_key(&post) {
                 return Err(Error::<T>::PostAlreadyExists.into())
             }
 
@@ -267,7 +293,7 @@ pub mod pallet {
             let voting_until = frame_system::Pallet::<T>::block_number() + voting_period;
 
             // Stores the submitter and bond info
-            Posts::<T>::insert(post.clone(), Post {
+            Posts::<T>::insert(&post, Post {
                 submitter: who.clone(),
                 bond,
                 bull_votes: Zero::zero(),
@@ -289,7 +315,7 @@ pub mod pallet {
         /// The function will return an error under the following conditions:
         ///
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the voting period has already closed ([`Error::VoteAlreadyResolved`])
+        /// - If the voting period has already closed ([`Error::PostAlreadyResolved`])
         /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::default())]
@@ -302,16 +328,26 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Error if the post does not exist.
-            if !Posts::<T>::contains_key(post.clone()) {
+            if !Posts::<T>::contains_key(&post) {
                 return Err(Error::<T>::PostDoesNotExist.into())
             }
+            let post_struct = Posts::<T>::get(&post).expect("Already checked that it exists");
 
             // Check if voting is still open for that post
-            let post_struct = Posts::<T>::get(post.clone()).expect("Already checked that it exists");
             // If current block number is higher than the ending period of the post's voting, error.
             if frame_system::Pallet::<T>::block_number() > post_struct.voting_until {
-                return Err(Error::<T>::VoteAlreadyResolved.into())
+                return Err(Error::<T>::PostAlreadyResolved.into())
             }
+
+            // Error if the post is already resolved
+            if post_struct.resolved {
+                return Err(Error::<T>::PostAlreadyResolved.into())
+            }
+
+            // Check if they have already voted
+            if Votes::contains_key(&who, &post_struct) {
+                return Err(Error::<T>::AlreadyVoted.into())
+            };
 
             // Error if they do not have enough balance for the freeze
             if vote_amount > <<T as Config>::NativeBalance>::total_balance(&who) {
@@ -320,6 +356,9 @@ pub mod pallet {
 
             // Extend_freeze
             <<T as Config>::NativeBalance>::extend_freeze(&FreezeReason::Vote.into(), &who, vote_amount)?;
+
+            // Store vote
+            Votes::insert(&who, &post_struct, (vote_amount, &direction));
 
             // Stores vote info/updates post struct according to vote direction
             let updated_post_struct = match direction {
@@ -337,7 +376,7 @@ pub mod pallet {
                 },
             };
 
-            Posts::<T>::insert(post.clone(), updated_post_struct);
+            Posts::<T>::insert(&post, updated_post_struct);
 
             // Emit an event.
             Self::deposit_event(Event::VoteSubmitted {
@@ -351,7 +390,108 @@ pub mod pallet {
         }
 
 
-        /// Resolves a vote, rewarding or slashing the submitter and unfreezing voted tokens.
+        /// Updates an account's vote and freeze accordingly. Only possible before a vote is resolved.
+        ///
+        /// ## Errors
+        ///
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If the post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the vote has already been resolved ([`Error::PostAlreadyResolved`])
+        /// - If this particular vote doesn't exist (['Error::VoteDoesNotExist'])
+        /// - If the unfreeze underflows
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::default())]
+        pub fn update_vote(origin: OriginFor<T>,
+            post: T::Post,
+            new_vote: BalanceOf<T>,
+            direction: Direction
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            // Error if the post does not exist.
+            if !Posts::<T>::contains_key(&post) {
+                return Err(Error::<T>::PostDoesNotExist.into())
+            }
+            let post_struct = Posts::<T>::get(&post).expect("Already checked that it exists");
+
+            // Check if voting is still open for that post
+            // If current block number is higher than the ending period of the post's voting, error.
+            if frame_system::Pallet::<T>::block_number() > post_struct.voting_until {
+                return Err(Error::<T>::PostAlreadyResolved.into())
+            }
+
+            // Error if the post is already resolved
+            if post_struct.resolved {
+                return Err(Error::<T>::PostAlreadyResolved.into())
+            }
+            // Error if this particular vote no longer exists or never existed.
+            if !Votes::<T>::contains_key(&who, &post_struct) {
+                return Err(Error::<T>::VoteDoesNotExist.into())
+            }
+
+            // Error if they do not have enough balance for the freeze
+            if new_vote > <<T as Config>::NativeBalance>::total_balance(&who) {
+                return Err(Error::<T>::InsufficientFreeBalance.into())
+            };
+
+            let (previous_amount, previous_direction) = Votes::take(&who, &post_struct);
+
+            // Extend_freeze
+            <<T as Config>::NativeBalance>::extend_freeze(&FreezeReason::Vote.into(), &who, new_vote)?;
+
+            // Store vote
+            Votes::insert(&who, &post_struct, (new_vote, &direction));
+
+            // Updates post struct's vote totals according to vote amount and direction
+            // Removes previous directional vote and adds new vote
+            let updated_post_struct = match direction {
+                Direction::Bullish => {
+                    if previous_direction == Direction::Bullish {
+                        Post {
+                            bull_votes: post_struct.bull_votes - previous_amount + new_vote,
+                            ..post_struct
+                        }
+                    } else {
+                        Post {
+                            bull_votes: post_struct.bull_votes + new_vote,
+                            bear_votes: post_struct.bear_votes - previous_amount,
+                            ..post_struct
+                        }
+                    }
+                },
+                Direction::Bearish => {
+                    if previous_direction == Direction::Bearish {
+                        Post {
+                            bear_votes: post_struct.bear_votes - previous_amount + new_vote,
+                            ..post_struct
+                        }
+                    } else {
+                        Post {
+                            bull_votes: post_struct.bull_votes - previous_amount,
+                            bear_votes: post_struct.bear_votes + new_vote,
+                            ..post_struct
+                        }
+                    }
+                },
+            };
+
+            Posts::<T>::insert(&post, updated_post_struct);
+
+            // Emit an event.
+            Self::deposit_event(Event::VoteSubmitted {
+                post,
+                voter: who,
+                vote_amount: new_vote,
+                direction,
+            });
+
+            
+            Ok(())
+        }
+
+
+        /// Resolves a post, rewarding or slashing the submitter and enabling unfreeze_vote.
         /// Callable by anyone.
         ///
         /// ## Errors
@@ -359,28 +499,28 @@ pub mod pallet {
         /// The function will return an error under the following conditions:
         ///
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the vote is still in progress ([`Error::VoteStillOngoing`])
-        /// - If the vote has already been resolved ([`Error::VoteAlreadyResolved`])
-        #[pallet::call_index(2)]
+        /// - If the vote is still in progress ([`Error::VotingStillOngoing`])
+        /// - If the vote has already been resolved ([`Error::PostAlreadyResolved`])
+        #[pallet::call_index(3)]
         #[pallet::weight(Weight::default())]
-        pub fn resolve_vote(origin: OriginFor<T>, post: T::Post) -> DispatchResult {
+        pub fn resolve_post(origin: OriginFor<T>, post: T::Post) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             // Error if the post does not exist.
-            if !Posts::<T>::contains_key(post.clone()) {
+            if !Posts::<T>::contains_key(&post) {
                 return Err(Error::<T>::PostDoesNotExist.into())
             }
 
             // Check if the voting period is over for that post
-            let post_struct = Posts::<T>::get(post.clone()).expect("Already checked that it exists");
+            let post_struct = Posts::<T>::get(&post).expect("Already checked that it exists");
             // If current block number is lower than the ending period of the post's voting, voting has not ended; error.
             if frame_system::Pallet::<T>::block_number() < post_struct.voting_until {
-                return Err(Error::<T>::VoteStillOngoing.into())
+                return Err(Error::<T>::VotingStillOngoing.into())
             }
 
             // Error if already resolved.
             if post_struct.resolved == true {
-                return Err(Error::<T>::VoteAlreadyResolved.into())
+                return Err(Error::<T>::PostAlreadyResolved.into())
             }
 
             // Resolve the vote and update storage
@@ -388,7 +528,7 @@ pub mod pallet {
                 resolved: true,
                 ..post_struct
             };
-            Posts::<T>::insert(post, updated_post_struct.clone());
+            Posts::<T>::insert(&post, &updated_post_struct);
 
             // Reward/slash amount
             let amount = post_struct.bond;
@@ -396,21 +536,82 @@ pub mod pallet {
             // Unlock submitter's bond
             T::NativeBalance::release(&HoldReason::PostBond.into(), &who, amount, Precision::BestEffort)?;
 
+            let result: Direction = match updated_post_struct.bull_votes > updated_post_struct.bear_votes {
+                true => Direction::Bullish,
+                false => Direction::Bearish,
+            };
+
             // Reward/slash submitter or do nothing if there is a tie
-            if updated_post_struct.bull_votes > updated_post_struct.bear_votes {
+            if result == Direction::Bullish {
                 // Reward the submitter
                 T::NativeBalance::mint_into(&who, amount)?;
+
+                Self::deposit_event(Event::PostResolved { 
+                    post,
+                    submitter: updated_post_struct.submitter,
+                    result,
+                    rewarded: amount,
+                    slashed: Zero::zero(),
+                });
             } else {
                 // Slashes the submitter
                 T::NativeBalance::burn_from(&who, amount, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+
+                Self::deposit_event(Event::PostResolved { 
+                    post,
+                    submitter: updated_post_struct.submitter,
+                    result,
+                    rewarded: Zero::zero(),
+                    slashed: amount
+                });
             }
 
-            // unfreeze votes
-            // SEE TODO ABOVE BY POSTS STORAGE
+            Ok(())
+        }
 
 
+        /// Unfreezes the tokens used in a user's vote.
+        /// Callable by anyone.
+        ///
+        /// ## Errors
+        ///
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If the post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the vote is unresolved ([`Error::PostUnresolved`])
+        /// - If this particular vote no longer exists or never existed (['Error::VoteDoesNotExist'])
+        /// - If the unfreeze underflows
+        #[pallet::call_index(4)]
+        #[pallet::weight(Weight::default())]
+        pub fn unfreeze_vote(origin: OriginFor<T>, account: T::AccountId, post: T::Post) -> DispatchResult {
+            let _who = ensure_signed(origin)?;
 
-            //Self::deposit_event(event);
+            // Error if the post does not exist.
+            if !Posts::<T>::contains_key(&post) {
+                return Err(Error::<T>::PostDoesNotExist.into())
+            }
+            let post_struct = Posts::<T>::get(&post).expect("Already checked that it exists");
+
+            // Error if the post is not resolved yet
+            if !post_struct.resolved {
+                return Err(Error::<T>::PostUnresolved.into())
+            }
+            // Error if this particular vote no longer exists or never existed.
+            if !Votes::<T>::contains_key(&account, &post_struct) {
+                return Err(Error::<T>::VoteDoesNotExist.into())
+            }
+            let (amount, _direction) = Votes::take(&account, post_struct);
+            
+            // Remove freeze
+            <<T as Config>::NativeBalance>::decrease_frozen(&FreezeReason::Vote.into(), &account, amount.clone())?;
+
+            // Emit an event
+            Self::deposit_event(Event::VoteUnfrozen {
+                post,
+                account,
+                amount,
+            });
+            
 
             Ok(())
         }
