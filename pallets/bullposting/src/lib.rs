@@ -39,7 +39,7 @@ pub mod pallet {
     use scale_info::prelude::fmt::Debug;
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
-    use frame_support::sp_runtime::traits::{CheckedSub, Zero};
+    use frame_support::sp_runtime::traits::{CheckedSub, CheckedMul, CheckedDiv, Zero};
 
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
@@ -72,9 +72,39 @@ pub mod pallet {
         type RuntimeFreezeReason: From<FreezeReason>;
         /// The ID type for freezes.
 		type FreezeIdentifier: Parameter + Member + MaxEncodedLen + Copy;
-        /// The maximum number of individual freeze locks that can exist on an account at any time.
-		#[pallet::constant]
-		type MaxFreezes: Get<u32>;
+
+        /// Determines whether Bullish post rewards are a flat number or coefficient.
+        /// A value of 0 (false) equals a flat number.
+        /// A value of 1 (true) equals a coefficient.
+        #[pallet::constant]
+        type RewardStyle: Get<bool>;
+
+        /// The reward given to submitters of Bullish posts.
+        #[pallet::constant]
+        type FlatReward: Get<u32>;
+
+        /// The coefficient used to determine a submitter's reward if their post is voted Bullish.
+        /// A value of 1 (bond 10 tokens, end up with 20 total)
+        /// A value of 2 will reward them with 2x their bond (bond 10 tokens, end up with 30 total)
+        // TODO: ADD A BOOL TYPE FOR WHETHER TO USE A COEFFICIENT OR A FLAT NUMBER, UPDATE RESOLVE() ACCORDINGLY
+        #[pallet::constant]
+        type RewardCoefficient: Get<u32>;
+
+        /// Determines whether the bond for Bearish posts are slashed by a flat number or a coefficient.
+        /// A value of 0 (false) equals a flat number.
+        /// A value of 1 (true) equals a coefficient.
+        #[pallet::constant]
+        type SlashStyle: Get<bool>;
+
+        /// The amount of tokens slashed from the submitter of a Bearish post.
+        #[pallet::constant]
+        type FlatSlash: Get<u32>;
+
+        /// The coefficient used to determine how much of a a submitter's bond is slashed if their post is voted Bearish.
+        /// A value of 1 will slash their entire bond, a value of 3 will slash a third of their bond.
+        // TODO: ADD A BOOL TYPE FOR WHETHER TO USE A COEFFICIENT OR A FLAT NUMBER, UPDATE RESOLVE() ACCORDINGLY
+        #[pallet::constant]
+        type SlashDenominator: Get<u8>;
 
         // TODO: FIGURE OUT HOW TO SET A CONSTANT VOTING PERIOD
 
@@ -215,7 +245,6 @@ pub mod pallet {
         PeriodTooShort,
         /// Post already submitted.
         PostAlreadyExists,
-        /// TODO: MAKE 1 ERROR FOR HOLD AND 1 FOR FREEZE
         /// Insufficient available balance.
         InsufficientFreeBalance,
         /// Post has not been submitted.
@@ -230,9 +259,6 @@ pub mod pallet {
         PostUnresolved,
         /// Vote already closed and resolved.
         PostAlreadyResolved,
-        // TODO: SHOULD BE HANDLED BETTER SOMEHOW?
-        /// If there is an overflow while doing checked_add().
-        Overflow,
     }
 
     /// The pallet's dispatchable functions ([`Call`]s).
@@ -504,6 +530,7 @@ pub mod pallet {
             // Error if the post does not exist.
             ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
             let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
+            let submitter = post_struct.submitter;
 
             // Check if the voting period is over for that post
             // If current block number is lower than the ending period of the post's voting, voting has not ended; error.
@@ -520,10 +547,10 @@ pub mod pallet {
             Posts::<T>::insert(&id, &updated_post_struct);
 
             // Reward/slash amount
-            let amount = post_struct.bond;
+            let bond = post_struct.bond;
 
             // Unlock submitter's bond
-            T::NativeBalance::release(&HoldReason::PostBond.into(), &who, amount, Precision::BestEffort)?;
+            T::NativeBalance::release(&HoldReason::PostBond.into(), &submitter, bond, Precision::BestEffort)?;
 
             let result: Direction = match updated_post_struct.bull_votes > updated_post_struct.bear_votes {
                 true => Direction::Bullish,
@@ -533,25 +560,37 @@ pub mod pallet {
             // Reward/slash submitter or do nothing if there is a tie
             if result == Direction::Bullish {
                 // Reward the submitter
-                T::NativeBalance::mint_into(&who, amount)?;
+                let reward: BalanceOf<T>;
+                // TODO: SAFE MATH
+                if T::RewardStyle.get() == false {
+                    let reward = Self::reward_flat(&submitter)?;
+                } else {
+                    let reward= Self::reward_coefficient(&submitter, &bond)?;
+                }
 
                 Self::deposit_event(Event::PostResolved { 
                     id,
-                    submitter: updated_post_struct.submitter,
+                    submitter,
                     result,
-                    rewarded: amount,
+                    rewarded: reward,
                     slashed: Zero::zero(),
                 });
             } else {
                 // Slashes the submitter
-                T::NativeBalance::burn_from(&who, amount, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+                let slash: BalanceOf<T>;
+                // TODO: SAFE MATH
+                if T::SlashStyle.get() == false {
+                    let slash = Self::slash_flat(&submitter)?;
+                } else {
+                    let slash= Self::slash_coefficient(&submitter, &bond)?;
+                }
 
                 Self::deposit_event(Event::PostResolved { 
                     id,
-                    submitter: updated_post_struct.submitter,
+                    submitter,
                     result,
                     rewarded: Zero::zero(),
-                    slashed: amount
+                    slashed: slash
                 });
             }
 
@@ -601,6 +640,39 @@ pub mod pallet {
             
 
             Ok(())
+        }
+    }
+
+    impl<T: Config> Pallet<T> {
+        pub(crate) fn reward_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
+            // Reward the submitter
+            let reward = T::FlatReward::get().into();
+            T::NativeBalance::mint_into(&who, reward)?;
+            Ok(reward)
+        }
+        
+        pub(crate) fn reward_coefficient(who: &T::AccountId, bond: &BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
+            // Reward the submitter
+            // TODO: SAFE MATH
+            let reward = bond.checked_mul(T::RewardCoefficient::get().into()).expect("TODO");
+            T::NativeBalance::mint_into(&who, reward)?;
+            Ok(reward)
+        }
+
+        pub(crate) fn slash_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
+            let slash = T::FlatSlash.get().into();
+            T::NativeBalance::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+
+            Ok(slash)
+        }
+
+        pub(crate) fn slash_coefficient(who: &T::AccountId, bond: &BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
+            // Slashes the submitter
+            // TODO: SAFE MATH
+            let slash = bond.checked_div(T::SlashDenominator::get().into()).expect("TODO");
+            T::NativeBalance::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+            
+            Ok(slash)
         }
     }
 }
