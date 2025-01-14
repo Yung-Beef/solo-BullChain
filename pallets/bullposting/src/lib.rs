@@ -562,7 +562,7 @@ pub mod pallet {
                 // Reward the submitter
                 let reward: BalanceOf<T>;
                 // TODO: SAFE MATH
-                if T::RewardStyle.get() == false {
+                if T::RewardStyle::get() == false {
                     let reward = Self::reward_flat(&submitter)?;
                 } else {
                     let reward= Self::reward_coefficient(&submitter, &bond)?;
@@ -579,7 +579,7 @@ pub mod pallet {
                 // Slashes the submitter
                 let slash: BalanceOf<T>;
                 // TODO: SAFE MATH
-                if T::SlashStyle.get() == false {
+                if T::SlashStyle::get() == false {
                     let slash = Self::slash_flat(&submitter)?;
                 } else {
                     let slash= Self::slash_coefficient(&submitter, &bond)?;
@@ -644,28 +644,34 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        // Reward a flat amount
         pub(crate) fn reward_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
             // Reward the submitter
             let reward = T::FlatReward::get().into();
             T::NativeBalance::mint_into(&who, reward)?;
+
             Ok(reward)
         }
         
+        // Reward based on a coefficient and how much they bonded
         pub(crate) fn reward_coefficient(who: &T::AccountId, bond: &BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
             // Reward the submitter
             // TODO: SAFE MATH
             let reward = bond.checked_mul(T::RewardCoefficient::get().into()).expect("TODO");
             T::NativeBalance::mint_into(&who, reward)?;
+
             Ok(reward)
         }
 
+        // Slash a flat amount
         pub(crate) fn slash_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
-            let slash = T::FlatSlash.get().into();
+            let slash = T::FlatSlash::get().into();
             T::NativeBalance::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
 
             Ok(slash)
         }
 
+        // Slash based on a coefficient and how much they bonded
         pub(crate) fn slash_coefficient(who: &T::AccountId, bond: &BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
             // Slashes the submitter
             // TODO: SAFE MATH
