@@ -35,8 +35,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     // Other imports
-    use codec::{EncodeLike, MaxEncodedLen};
-    use scale_info::{prelude::fmt::Debug, StaticTypeInfo};
+    use codec::MaxEncodedLen;
+    use scale_info::prelude::fmt::Debug;
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
     use frame_support::sp_runtime::traits::{CheckedSub, Zero};
@@ -58,8 +58,6 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// A type representing the weights required by the dispatchables of this pallet.
         type WeightInfo: WeightInfo;
-        /// A type representing the post submitted to the chain by a user. Will likely be hashed by the client from a string.
-        type Post: MaxEncodedLen + EncodeLike + Decode + StaticTypeInfo + Clone + Debug + PartialEq;
         /// A type representing the token used.
         type NativeBalance: fungible::Inspect<Self::AccountId>
         + fungible::Mutate<Self::AccountId>
@@ -122,7 +120,7 @@ pub mod pallet {
     /// Stores the post ID as the key and a post struct (with the additional info such as the submitter) as the value
     #[pallet::storage]
     pub type Posts<T: Config> =
-        StorageMap<_, Blake2_128Concat, <T as pallet::Config>::Post, Post<T>>;
+        StorageMap<_, Blake2_128Concat, [u8; 32], Post<T>>;
 
     
     /// Stores the vote size per account and post
@@ -153,7 +151,7 @@ pub mod pallet {
         /// Post submitted successfully.
         PostSubmitted {
             /// The post ID.
-            post: T::Post,
+            id: [u8; 32],
             /// The account that submitted the post and bonded tokens.
             submitter: T::AccountId,
             /// Amount of bonded tokens.
@@ -164,7 +162,7 @@ pub mod pallet {
         /// Vote submitted successfully.
         VoteSubmitted {
             /// The post ID.
-            post: T::Post,
+            id: [u8; 32],
             /// The account voting on the post.
             voter: T::AccountId,
             /// The amount of tokens frozen for the vote.
@@ -175,7 +173,7 @@ pub mod pallet {
         /// Vote updated successfully.
         VoteUpdated {
             /// The post ID.
-            post: T::Post,
+            id: [u8; 32],
             /// The account voting on the post.
             voter: T::AccountId,
             /// The amount of tokens frozen for the vote.
@@ -186,7 +184,7 @@ pub mod pallet {
         /// Vote closed and resolved, unlocking voted tokens and rewarding or slashing the submitter.
         PostResolved {
             /// The post ID.
-            post: T::Post,
+            id: [u8; 32],
             /// The account that submitted the post and bonded tokens.
             submitter: T::AccountId,
             /// Bullish means the submitter was rewarded, Bearish means they were slashed
@@ -195,7 +193,7 @@ pub mod pallet {
             slashed: BalanceOf<T>,
         },
         VoteUnfrozen {
-            post: T::Post,
+            id: [u8; 32],
             account: T::AccountId,
             amount: BalanceOf<T>,
         }
@@ -211,6 +209,8 @@ pub mod pallet {
     /// information.
     #[pallet::error]
     pub enum Error<T> {
+        /// Submitted URL was empty.
+        Empty,
         /// The voting period was too short.
         PeriodTooShort,
         /// Post already submitted.
@@ -264,36 +264,36 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
         /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
         /// - If the submitter does not have sufficient free tokens to bond ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::default())]
         pub fn submit_post(
             origin: OriginFor<T>,
-            post: T::Post,
+            post_url: Vec<u8>,
             bond: BalanceOf<T>,
             voting_period: BlockNumberFor<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            let id = sp_io::hashing::blake2_256(&post_url);
 
-            // TODO: CHECK IF POST NEEDS TO BE CLONED OR CAN BE REFERENCED
             // Checks if the post exists
-            if Posts::<T>::contains_key(&post) {
-                return Err(Error::<T>::PostAlreadyExists.into())
-            }
+            ensure!(Posts::<T>::contains_key(&id), Error::<T>::PostAlreadyExists);
 
             // Checks if they have enough balance available to be bonded
             let reduc_bal = <<T as Config>::NativeBalance>::
             reducible_balance(&who, Preservation::Preserve, Fortitude::Polite);
             reduc_bal.checked_sub(&bond).ok_or(Error::<T>::InsufficientFreeBalance)?;
 
-            // Bonds the balance
+            // Bonds the submitter's balance
             T::NativeBalance::hold(&HoldReason::PostBond.into(), &who, bond)?;
 
             let voting_until = frame_system::Pallet::<T>::block_number() + voting_period;
 
             // Stores the submitter and bond info
-            Posts::<T>::insert(&post, Post {
+            Posts::<T>::insert(&id, Post {
                 submitter: who.clone(),
                 bond,
                 bull_votes: Zero::zero(),
@@ -303,7 +303,7 @@ pub mod pallet {
             });
 
             // Emit an event.
-            Self::deposit_event(Event::PostSubmitted { post, submitter: who, bond, voting_until });
+            Self::deposit_event(Event::PostSubmitted { id, submitter: who, bond, voting_until });
 
             Ok(())
         }
@@ -314,45 +314,40 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the voting period has already closed ([`Error::PostAlreadyResolved`])
+        /// - If they have already voted once ([`Error::AlreadyVoted`])
         /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
+        /// - If extend_freeze() underflows
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::default())]
         pub fn submit_vote(
             origin: OriginFor<T>,
-            post: T::Post,
+            post_url: Vec<u8>,
             vote_amount: BalanceOf<T>,
             direction: Direction,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
-            if !Posts::<T>::contains_key(&post) {
-                return Err(Error::<T>::PostDoesNotExist.into())
-            }
-            let post_struct = Posts::<T>::get(&post).expect("Already checked that it exists");
-
+            ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
+            let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
+            
             // Check if voting is still open for that post
             // If current block number is higher than the ending period of the post's voting, error.
-            if frame_system::Pallet::<T>::block_number() > post_struct.voting_until {
-                return Err(Error::<T>::PostAlreadyResolved.into())
-            }
+            ensure!(frame_system::Pallet::<T>::block_number() < post_struct.voting_until, Error::<T>::PostAlreadyResolved);
 
             // Error if the post is already resolved
-            if post_struct.resolved {
-                return Err(Error::<T>::PostAlreadyResolved.into())
-            }
+            ensure!(!post_struct.resolved, Error::<T>::PostAlreadyResolved);
 
             // Check if they have already voted
-            if Votes::contains_key(&who, &post_struct) {
-                return Err(Error::<T>::AlreadyVoted.into())
-            };
+            ensure!(!Votes::contains_key(&who, &post_struct), Error::<T>::AlreadyVoted);
 
-            // Error if they do not have enough balance for the freeze
-            if vote_amount > <<T as Config>::NativeBalance>::total_balance(&who) {
-                return Err(Error::<T>::InsufficientFreeBalance.into())
-            };
+            // Check if they have enough balance for the freeze
+            ensure!(vote_amount < <<T as Config>::NativeBalance>::total_balance(&who), Error::<T>::InsufficientFreeBalance);
 
             // Extend_freeze
             <<T as Config>::NativeBalance>::extend_freeze(&FreezeReason::Vote.into(), &who, vote_amount)?;
@@ -376,11 +371,11 @@ pub mod pallet {
                 },
             };
 
-            Posts::<T>::insert(&post, updated_post_struct);
+            Posts::<T>::insert(&id, updated_post_struct);
 
             // Emit an event.
             Self::deposit_event(Event::VoteSubmitted {
-                post,
+                id,
                 voter: who,
                 vote_amount,
                 direction,
@@ -396,44 +391,40 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the vote has already been resolved ([`Error::PostAlreadyResolved`])
         /// - If this particular vote doesn't exist (['Error::VoteDoesNotExist'])
-        /// - If the unfreeze underflows
+        /// - If the user does not have enough balance for their new vote ([`Error::InsufficientBalance`])
+        /// - If extend_freeze() underflows
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::default())]
-        pub fn update_vote(origin: OriginFor<T>,
-            post: T::Post,
+        pub fn update_vote(
+            origin: OriginFor<T>,
+            post_url: Vec<u8>,
             new_vote: BalanceOf<T>,
             direction: Direction
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
-            if !Posts::<T>::contains_key(&post) {
-                return Err(Error::<T>::PostDoesNotExist.into())
-            }
-            let post_struct = Posts::<T>::get(&post).expect("Already checked that it exists");
+            ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
+            let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
 
             // Check if voting is still open for that post
             // If current block number is higher than the ending period of the post's voting, error.
-            if frame_system::Pallet::<T>::block_number() > post_struct.voting_until {
-                return Err(Error::<T>::PostAlreadyResolved.into())
-            }
+            ensure!(frame_system::Pallet::<T>::block_number() < post_struct.voting_until, Error::<T>::PostAlreadyResolved);
 
             // Error if the post is already resolved
-            if post_struct.resolved {
-                return Err(Error::<T>::PostAlreadyResolved.into())
-            }
+            ensure!(!post_struct.resolved, Error::<T>::PostAlreadyResolved);
+
             // Error if this particular vote no longer exists or never existed.
-            if !Votes::<T>::contains_key(&who, &post_struct) {
-                return Err(Error::<T>::VoteDoesNotExist.into())
-            }
+            ensure!(Votes::<T>::contains_key(&who, &post_struct), Error::<T>::VoteDoesNotExist);
 
             // Error if they do not have enough balance for the freeze
-            if new_vote > <<T as Config>::NativeBalance>::total_balance(&who) {
-                return Err(Error::<T>::InsufficientFreeBalance.into())
-            };
+            ensure!(new_vote < <<T as Config>::NativeBalance>::total_balance(&who), Error::<T>::InsufficientFreeBalance);
 
             let (previous_amount, previous_direction) = Votes::take(&who, &post_struct);
 
@@ -476,11 +467,11 @@ pub mod pallet {
                 },
             };
 
-            Posts::<T>::insert(&post, updated_post_struct);
+            Posts::<T>::insert(&id, updated_post_struct);
 
             // Emit an event.
             Self::deposit_event(Event::VoteSubmitted {
-                post,
+                id,
                 voter: who,
                 vote_amount: new_vote,
                 direction,
@@ -498,37 +489,35 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the vote is still in progress ([`Error::VotingStillOngoing`])
         /// - If the vote has already been resolved ([`Error::PostAlreadyResolved`])
+        /// - If release() is unsuccessful
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::default())]
-        pub fn resolve_post(origin: OriginFor<T>, post: T::Post) -> DispatchResult {
+        pub fn resolve_post(origin: OriginFor<T>, post_url: Vec<u8>) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
-            if !Posts::<T>::contains_key(&post) {
-                return Err(Error::<T>::PostDoesNotExist.into())
-            }
+            ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
+            let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
 
             // Check if the voting period is over for that post
-            let post_struct = Posts::<T>::get(&post).expect("Already checked that it exists");
             // If current block number is lower than the ending period of the post's voting, voting has not ended; error.
-            if frame_system::Pallet::<T>::block_number() < post_struct.voting_until {
-                return Err(Error::<T>::VotingStillOngoing.into())
-            }
+            ensure!(frame_system::Pallet::<T>::block_number() < post_struct.voting_until, Error::<T>::PostAlreadyResolved);
 
             // Error if already resolved.
-            if post_struct.resolved == true {
-                return Err(Error::<T>::PostAlreadyResolved.into())
-            }
+            ensure!(!post_struct.resolved, Error::<T>::PostAlreadyResolved);
 
             // Resolve the vote and update storage
             let updated_post_struct = Post {
                 resolved: true,
                 ..post_struct
             };
-            Posts::<T>::insert(&post, &updated_post_struct);
+            Posts::<T>::insert(&id, &updated_post_struct);
 
             // Reward/slash amount
             let amount = post_struct.bond;
@@ -547,7 +536,7 @@ pub mod pallet {
                 T::NativeBalance::mint_into(&who, amount)?;
 
                 Self::deposit_event(Event::PostResolved { 
-                    post,
+                    id,
                     submitter: updated_post_struct.submitter,
                     result,
                     rewarded: amount,
@@ -558,7 +547,7 @@ pub mod pallet {
                 T::NativeBalance::burn_from(&who, amount, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
 
                 Self::deposit_event(Event::PostResolved { 
-                    post,
+                    id,
                     submitter: updated_post_struct.submitter,
                     result,
                     rewarded: Zero::zero(),
@@ -577,29 +566,27 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the vote is unresolved ([`Error::PostUnresolved`])
         /// - If this particular vote no longer exists or never existed (['Error::VoteDoesNotExist'])
-        /// - If the unfreeze underflows
+        /// - If decrease_frozen() underflows
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::default())]
-        pub fn unfreeze_vote(origin: OriginFor<T>, account: T::AccountId, post: T::Post) -> DispatchResult {
+        pub fn unfreeze_vote(origin: OriginFor<T>, account: T::AccountId, post_url: Vec<u8>,) -> DispatchResult {
             let _who = ensure_signed(origin)?;
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
-            if !Posts::<T>::contains_key(&post) {
-                return Err(Error::<T>::PostDoesNotExist.into())
-            }
-            let post_struct = Posts::<T>::get(&post).expect("Already checked that it exists");
+            ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
+            let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
 
             // Error if the post is not resolved yet
-            if !post_struct.resolved {
-                return Err(Error::<T>::PostUnresolved.into())
-            }
+            ensure!(post_struct.resolved, Error::<T>::PostUnresolved);
+
             // Error if this particular vote no longer exists or never existed.
-            if !Votes::<T>::contains_key(&account, &post_struct) {
-                return Err(Error::<T>::VoteDoesNotExist.into())
-            }
+            ensure!(Votes::<T>::contains_key(&account, &post_struct), Error::<T>::VoteDoesNotExist);
             let (amount, _direction) = Votes::take(&account, post_struct);
             
             // Remove freeze
@@ -607,7 +594,7 @@ pub mod pallet {
 
             // Emit an event
             Self::deposit_event(Event::VoteUnfrozen {
-                post,
+                id,
                 account,
                 amount,
             });
