@@ -40,6 +40,7 @@ pub mod pallet {
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
     use frame_support::sp_runtime::traits::{CheckedSub, CheckedMul, CheckedDiv, Zero};
+    use frame_support::sp_runtime::ArithmeticError::*;
 
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
@@ -86,7 +87,6 @@ pub mod pallet {
         /// The coefficient used to determine a submitter's reward if their post is voted Bullish.
         /// A value of 1 (bond 10 tokens, end up with 20 total)
         /// A value of 2 will reward them with 2x their bond (bond 10 tokens, end up with 30 total)
-        // TODO: ADD A BOOL TYPE FOR WHETHER TO USE A COEFFICIENT OR A FLAT NUMBER, UPDATE RESOLVE() ACCORDINGLY
         #[pallet::constant]
         type RewardCoefficient: Get<u32>;
 
@@ -102,11 +102,13 @@ pub mod pallet {
 
         /// The coefficient used to determine how much of a a submitter's bond is slashed if their post is voted Bearish.
         /// A value of 1 will slash their entire bond, a value of 3 will slash a third of their bond.
-        // TODO: ADD A BOOL TYPE FOR WHETHER TO USE A COEFFICIENT OR A FLAT NUMBER, UPDATE RESOLVE() ACCORDINGLY
+        /// WARNING: DO NOT SET TO 0
         #[pallet::constant]
         type SlashDenominator: Get<u8>;
 
-        // TODO: FIGURE OUT HOW TO SET A CONSTANT VOTING PERIOD
+        /// The number of blocks that votes will last.
+        #[pallet::constant]
+        type VotingPeriod: Get<BlockNumberFor<Self>>;
 
 
     }
@@ -259,6 +261,8 @@ pub mod pallet {
         PostUnresolved,
         /// Vote already closed and resolved.
         PostAlreadyResolved,
+        /// If `SlashCoefficient` is set to 0 in the runtime and slash_coefficient() is called.
+        RuntimeImplementationError,
     }
 
     /// The pallet's dispatchable functions ([`Call`]s).
@@ -275,7 +279,6 @@ pub mod pallet {
     /// The [`weight`] macro is used to assign a weight to each call.
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        // TODO: CHANGE 2X THEIR BOND INTO A GENERIC SO IT'S CONFIGURABLE
         /// Submits a post to the chain for voting.
         /// If the post is ultimately voted as bullish, they will get 2x their bond.
         /// If it is voted as bearish, they lose their bond.
@@ -299,7 +302,6 @@ pub mod pallet {
             origin: OriginFor<T>,
             post_url: Vec<u8>,
             bond: BalanceOf<T>,
-            voting_period: BlockNumberFor<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             ensure!(!post_url.is_empty(), Error::<T>::Empty);
@@ -316,7 +318,7 @@ pub mod pallet {
             // Bonds the submitter's balance
             T::NativeBalance::hold(&HoldReason::PostBond.into(), &who, bond)?;
 
-            let voting_until = frame_system::Pallet::<T>::block_number() + voting_period;
+            let voting_until = frame_system::Pallet::<T>::block_number() + T::VotingPeriod::get();
 
             // Stores the submitter and bond info
             Posts::<T>::insert(&id, Post {
@@ -523,14 +525,14 @@ pub mod pallet {
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::default())]
         pub fn resolve_post(origin: OriginFor<T>, post_url: Vec<u8>) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            let _who = ensure_signed(origin)?;
             ensure!(!post_url.is_empty(), Error::<T>::Empty);
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
             ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
             let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
-            let submitter = post_struct.submitter;
+            let submitter = post_struct.submitter.clone();
 
             // Check if the voting period is over for that post
             // If current block number is lower than the ending period of the post's voting, voting has not ended; error.
@@ -560,13 +562,10 @@ pub mod pallet {
             // Reward/slash submitter or do nothing if there is a tie
             if result == Direction::Bullish {
                 // Reward the submitter
-                let reward: BalanceOf<T>;
-                // TODO: SAFE MATH
-                if T::RewardStyle::get() == false {
-                    let reward = Self::reward_flat(&submitter)?;
-                } else {
-                    let reward= Self::reward_coefficient(&submitter, &bond)?;
-                }
+                let reward = match T::RewardStyle::get() {
+                    false => Self::reward_flat(&submitter)?,
+                    true => Self::reward_coefficient(&submitter, &bond)?,
+                };
 
                 Self::deposit_event(Event::PostResolved { 
                     id,
@@ -577,13 +576,10 @@ pub mod pallet {
                 });
             } else {
                 // Slashes the submitter
-                let slash: BalanceOf<T>;
-                // TODO: SAFE MATH
-                if T::SlashStyle::get() == false {
-                    let slash = Self::slash_flat(&submitter)?;
-                } else {
-                    let slash= Self::slash_coefficient(&submitter, &bond)?;
-                }
+                let slash = match T::SlashStyle::get() {
+                    false => Self::slash_flat(&submitter)?,
+                    true => Self::slash_coefficient(&submitter, &bond)?,
+                };
 
                 Self::deposit_event(Event::PostResolved { 
                     id,
@@ -643,6 +639,8 @@ pub mod pallet {
         }
     }
 
+
+
     impl<T: Config> Pallet<T> {
         // Reward a flat amount
         pub(crate) fn reward_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
@@ -656,8 +654,11 @@ pub mod pallet {
         // Reward based on a coefficient and how much they bonded
         pub(crate) fn reward_coefficient(who: &T::AccountId, bond: &BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
             // Reward the submitter
-            // TODO: SAFE MATH
-            let reward = bond.checked_mul(T::RewardCoefficient::get().into()).expect("TODO");
+            let reward = match bond.checked_mul(&T::RewardCoefficient::get().into()) {
+                None => return Err(DispatchError::Arithmetic(Overflow)),
+                Some(x) => x,
+            };
+
             T::NativeBalance::mint_into(&who, reward)?;
 
             Ok(reward)
@@ -673,9 +674,15 @@ pub mod pallet {
 
         // Slash based on a coefficient and how much they bonded
         pub(crate) fn slash_coefficient(who: &T::AccountId, bond: &BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
+            if T::SlashDenominator::get() == 0 {
+                return Err(Error::<T>::RuntimeImplementationError.into())
+            }
+            
             // Slashes the submitter
-            // TODO: SAFE MATH
-            let slash = bond.checked_div(T::SlashDenominator::get().into()).expect("TODO");
+            let slash = match bond.checked_div(&T::SlashDenominator::get().into()) {
+                None => return Err(DispatchError::Arithmetic(Underflow)),
+                Some(x) => x,
+            };
             T::NativeBalance::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
             
             Ok(slash)
