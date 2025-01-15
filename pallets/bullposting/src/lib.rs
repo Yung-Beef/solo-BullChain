@@ -39,8 +39,8 @@ pub mod pallet {
     use scale_info::prelude::fmt::Debug;
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
-    use frame_support::sp_runtime::traits::{CheckedSub, CheckedMul, CheckedDiv, Zero};
-    use frame_support::sp_runtime::ArithmeticError::*;
+    use frame_support::sp_runtime::traits::{CheckedSub, Zero};
+    use frame_support::sp_runtime::{Permill, Percent};
 
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
@@ -75,36 +75,38 @@ pub mod pallet {
 		type FreezeIdentifier: Parameter + Member + MaxEncodedLen + Copy;
 
         /// Determines whether Bullish post rewards are a flat number or coefficient.
-        /// A value of 0 (false) equals a flat number.
-        /// A value of 1 (true) equals a coefficient.
+        /// A value of false equals a flat number.
+        /// A value of true equals a coefficient.
         #[pallet::constant]
         type RewardStyle: Get<bool>;
 
-        /// The reward given to submitters of Bullish posts.
+        /// The reward given to submitters of Bullish posts, only used if RewardStyle is set to false.
         #[pallet::constant]
         type FlatReward: Get<u32>;
 
         /// The coefficient used to determine a submitter's reward if their post is voted Bullish.
+        /// Only used if RewardStyle is set to true.
         /// A value of 1 (bond 10 tokens, end up with 20 total)
         /// A value of 2 will reward them with 2x their bond (bond 10 tokens, end up with 30 total)
         #[pallet::constant]
         type RewardCoefficient: Get<u32>;
 
         /// Determines whether the bond for Bearish posts are slashed by a flat number or a coefficient.
-        /// A value of 0 (false) equals a flat number.
-        /// A value of 1 (true) equals a coefficient.
+        /// A value of false equals a flat number.
+        /// A value of true equals a coefficient.
         #[pallet::constant]
         type SlashStyle: Get<bool>;
 
-        /// The amount of tokens slashed from the submitter of a Bearish post.
+        /// The amount of tokens slashed from the submitter of a Bearish post, only used if SlashStyle is set to false.
         #[pallet::constant]
         type FlatSlash: Get<u32>;
 
         /// The coefficient used to determine how much of a a submitter's bond is slashed if their post is voted Bearish.
-        /// A value of 1 will slash their entire bond, a value of 3 will slash a third of their bond.
-        /// WARNING: DO NOT SET TO 0
+        /// Only used if SlashStyle is set to true.
+        /// A value of 100 will slash 100% of their bond, a value of 50 will slash a 50% of their bond.
+        /// If set to a value higher than 100, 100 will be used.
         #[pallet::constant]
-        type SlashDenominator: Get<u8>;
+        type SlashCoefficient: Get<u8>;
 
         /// The number of blocks that votes will last.
         #[pallet::constant]
@@ -261,8 +263,6 @@ pub mod pallet {
         PostUnresolved,
         /// Vote already closed and resolved.
         PostAlreadyResolved,
-        /// If `SlashCoefficient` is set to 0 in the runtime and slash_coefficient() is called.
-        RuntimeImplementationError,
     }
 
     /// The pallet's dispatchable functions ([`Call`]s).
@@ -562,7 +562,7 @@ pub mod pallet {
             // Reward/slash submitter or do nothing if there is a tie
             if result == Direction::Bullish {
                 // Reward the submitter
-                let reward = match T::RewardStyle::get() {
+                let rewarded = match T::RewardStyle::get() {
                     false => Self::reward_flat(&submitter)?,
                     true => Self::reward_coefficient(&submitter, &bond)?,
                 };
@@ -571,12 +571,12 @@ pub mod pallet {
                     id,
                     submitter,
                     result,
-                    rewarded: reward,
+                    rewarded,
                     slashed: Zero::zero(),
                 });
             } else {
                 // Slashes the submitter
-                let slash = match T::SlashStyle::get() {
+                let slashed = match T::SlashStyle::get() {
                     false => Self::slash_flat(&submitter)?,
                     true => Self::slash_coefficient(&submitter, &bond)?,
                 };
@@ -586,7 +586,7 @@ pub mod pallet {
                     submitter,
                     result,
                     rewarded: Zero::zero(),
-                    slashed: slash
+                    slashed,
                 });
             }
 
@@ -644,8 +644,9 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         // Reward a flat amount
         pub(crate) fn reward_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
-            // Reward the submitter
             let reward = T::FlatReward::get().into();
+
+            // Reward the submitter
             T::NativeBalance::mint_into(&who, reward)?;
 
             Ok(reward)
@@ -653,12 +654,9 @@ pub mod pallet {
         
         // Reward based on a coefficient and how much they bonded
         pub(crate) fn reward_coefficient(who: &T::AccountId, bond: &BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
-            // Reward the submitter
-            let reward = match bond.checked_mul(&T::RewardCoefficient::get().into()) {
-                None => return Err(DispatchError::Arithmetic(Overflow)),
-                Some(x) => x,
-            };
+            let reward = Permill::from_percent(T::RewardCoefficient::get()) * *bond;
 
+            // Reward the submitter
             T::NativeBalance::mint_into(&who, reward)?;
 
             Ok(reward)
@@ -667,6 +665,8 @@ pub mod pallet {
         // Slash a flat amount
         pub(crate) fn slash_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
             let slash = T::FlatSlash::get().into();
+
+            // Slash the submitter
             T::NativeBalance::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
 
             Ok(slash)
@@ -674,15 +674,15 @@ pub mod pallet {
 
         // Slash based on a coefficient and how much they bonded
         pub(crate) fn slash_coefficient(who: &T::AccountId, bond: &BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
-            if T::SlashDenominator::get() == 0 {
-                return Err(Error::<T>::RuntimeImplementationError.into())
-            }
+            let percent = if T::SlashCoefficient::get() <= 100 {
+                T::SlashCoefficient::get()
+            } else {
+                100
+            };
+            
+            let slash = Percent::from_percent(percent) * *bond;
             
             // Slashes the submitter
-            let slash = match bond.checked_div(&T::SlashDenominator::get().into()) {
-                None => return Err(DispatchError::Arithmetic(Underflow)),
-                Some(x) => x,
-            };
             T::NativeBalance::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
             
             Ok(slash)
