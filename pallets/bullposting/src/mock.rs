@@ -1,5 +1,8 @@
-use crate as pallet_bullposting;
-use frame_support::derive_impl;
+use crate::pallet as pallet_bullposting;
+use frame_support::{
+    derive_impl,
+    parameter_types,
+};
 use sp_runtime::BuildStorage;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -21,9 +24,27 @@ impl frame_system::Config for Test {
     type AccountData = pallet_balances::AccountData<Balance>;
 }
 
+parameter_types! {
+    pub const MaxFreezes: u32 = 10000;
+}
+
 #[derive_impl(pallet_balances::config_preludes::TestDefaultConfig)]
 impl pallet_balances::Config for Test {
 	type AccountStore = System;
+    type FreezeIdentifier = RuntimeFreezeReason;
+    type MaxFreezes = MaxFreezes;
+}
+
+type BlockNumber = u64;
+
+parameter_types! {
+    pub const RewardStyle: bool = false;
+    pub const FlatReward: u32 = FlatReward::get();
+    pub const RewardCoefficient: u32 = 100 ;
+    pub const SlashStyle: bool = false;
+    pub const FlatSlash: u32 = FlatSlash::get();
+    pub const SlashCoefficient: u8 = 100 ;
+    pub const VotingPeriod: BlockNumber = 1000;
 }
 
 impl pallet_bullposting::Config for Test {
@@ -33,13 +54,13 @@ impl pallet_bullposting::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
-    type RewardStyle = ();
-    type FlatReward = ();
-    type RewardCoefficient = ();
-    type SlashStyle = ();
-    type FlatSlash = ();
-    type SlashCoefficient = ();
-    type VotingPeriod = ();
+    type RewardStyle = RewardStyle;
+    type FlatReward = FlatReward;
+    type RewardCoefficient = RewardCoefficient;
+    type SlashStyle = SlashStyle;
+    type FlatSlash = FlatSlash;
+    type SlashCoefficient = SlashCoefficient;
+    type VotingPeriod = VotingPeriod;
 }
 
 // Build genesis storage according to the mock runtime.
