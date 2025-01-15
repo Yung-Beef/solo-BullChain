@@ -60,11 +60,8 @@ pub mod pallet {
         /// A type representing the weights required by the dispatchables of this pallet.
         type WeightInfo: WeightInfo;
         /// A type representing the token used.
-        type NativeBalance: fungible::Inspect<Self::AccountId>
-        + fungible::Mutate<Self::AccountId>
-        + fungible::hold::Inspect<Self::AccountId>
+        type NativeBalance: fungible::Mutate<Self::AccountId>
         + fungible::hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
-        + fungible::freeze::Inspect<Self::AccountId>
         + fungible::freeze::Mutate<Self::AccountId, Id = Self::RuntimeFreezeReason>;
 
         /// A type representing the reason an account's tokens are being held.

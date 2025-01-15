@@ -29,9 +29,17 @@ impl pallet_balances::Config for Test {
 impl pallet_bullposting::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
-    type Post = [u8; 8];
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type RuntimeFreezeReason = RuntimeFreezeReason;
+    type FreezeIdentifier = ();
+    type RewardStyle = ();
+    type FlatReward = ();
+    type RewardCoefficient = ();
+    type SlashStyle = ();
+    type FlatSlash = ();
+    type SlashCoefficient = ();
+    type VotingPeriod = ();
 }
 
 // Build genesis storage according to the mock runtime.
