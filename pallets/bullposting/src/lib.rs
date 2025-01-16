@@ -36,7 +36,7 @@ pub mod pallet {
 
     // Other imports
     use codec::MaxEncodedLen;
-    use scale_info::prelude::fmt::Debug;
+    use scale_info::prelude::{fmt::Debug, vec::Vec};
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
     use frame_support::sp_runtime::traits::{CheckedSub, Zero};
@@ -431,7 +431,7 @@ pub mod pallet {
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
-            ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
+            ensure!(Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
             let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
 
             // Check if voting is still open for that post
@@ -488,7 +488,7 @@ pub mod pallet {
             Posts::<T>::insert(&id, updated_post_struct);
 
             // Emit an event.
-            Self::deposit_event(Event::VoteSubmitted {
+            Self::deposit_event(Event::VoteUpdated {
                 id,
                 voter: who,
                 vote_amount: new_vote,
@@ -511,7 +511,6 @@ pub mod pallet {
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the vote is still in progress ([`Error::VotingStillOngoing`])
         /// - If the vote has already been resolved ([`Error::PostAlreadyResolved`])
-        /// - If release() is unsuccessful
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::default())]
         pub fn resolve_post(origin: OriginFor<T>, post_url: Vec<u8>) -> DispatchResult {
@@ -520,7 +519,7 @@ pub mod pallet {
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
-            ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
+            ensure!(Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
             let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
             let submitter = post_struct.submitter.clone();
 
@@ -594,8 +593,7 @@ pub mod pallet {
         /// - If they submit nothing for the post_url ([`Error::Empty`])
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the vote is unresolved ([`Error::PostUnresolved`])
-        /// - If this particular vote no longer exists or never existed (['Error::VoteDoesNotExist'])
-        /// - If decrease_frozen() underflows
+        /// - If this particular vote no longer exists (already unfrozen) or never existed (['Error::VoteDoesNotExist'])
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::default())]
         pub fn unfreeze_vote(origin: OriginFor<T>, account: T::AccountId, post_url: Vec<u8>,) -> DispatchResult {
@@ -604,7 +602,7 @@ pub mod pallet {
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
-            ensure!(!Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
+            ensure!(Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
             let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
 
             // Error if the post is not resolved yet

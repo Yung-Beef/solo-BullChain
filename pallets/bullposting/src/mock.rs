@@ -38,13 +38,15 @@ impl pallet_balances::Config for Test {
 type BlockNumber = u64;
 
 parameter_types! {
-    pub const RewardStyle: bool = false;
-    pub const FlatReward: u32 = FlatReward::get();
-    pub const RewardCoefficient: u32 = 100 ;
-    pub const SlashStyle: bool = false;
-    pub const FlatSlash: u32 = FlatSlash::get();
-    pub const SlashCoefficient: u8 = 100 ;
     pub const VotingPeriod: BlockNumber = 1000;
+    // false = FlatReward, true = RewardCoefficient
+    pub const RewardStyle: bool = true;
+    pub const FlatReward: u32 = 500;
+    pub const RewardCoefficient: u32 = 100;
+    // false = FlatSlash, true = SlashCoefficient
+    pub const SlashStyle: bool = true;
+    pub const FlatSlash: u32 = 500;
+    pub const SlashCoefficient: u8 = 100 ;
 }
 
 impl pallet_bullposting::Config for Test {
@@ -65,8 +67,10 @@ impl pallet_bullposting::Config for Test {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-    frame_system::GenesisConfig::<Test>::default()
-        .build_storage()
-        .unwrap()
-        .into()
+    let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
+    let genesis = pallet_balances::GenesisConfig::<Test> { 
+        balances: vec![(0, 1001), (1, 1001), (2, 1001), (3, 1001)]
+    };
+    genesis.assimilate_storage(&mut t).unwrap();
+    t.into()
 }
