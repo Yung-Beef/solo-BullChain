@@ -5,7 +5,7 @@ use frame_support::traits::tokens::{Preservation, Fortitude};
 
 
 #[test]
-fn test_submit_post() {
+fn test_try_submit_post() {
     new_test_ext().execute_with(|| {
         let alice = 0;
         let bob = 1;
@@ -25,14 +25,14 @@ fn test_submit_post() {
         assert_eq!(Balances::reducible_balance(&alice, Preservation::Preserve, Fortitude::Polite), bond);
 
         // Cannot submit an empty post
-        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(alice), empty_post, bond), Error::<Test>::Empty);
+        assert_noop!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), empty_post, bond), Error::<Test>::Empty);
 
 
         // Cannot bond more tokens than you have available
-        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond + 1), Error::<Test>::InsufficientFreeBalance);
+        assert_noop!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond + 1), Error::<Test>::InsufficientFreeBalance);
         
         // Call success with storage and event
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
+        assert_ok!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
         let testpost = crate::Post {
             submitter: alice,
             bond,
@@ -58,15 +58,15 @@ fn test_submit_post() {
         // Cannot resubmit an existing post
         assert_eq!(Balances::free_balance(bob), balance);
         assert_eq!(Balances::reducible_balance(&bob, Preservation::Preserve, Fortitude::Polite), bond);
-        assert_noop!(Bullposting::submit_post(RuntimeOrigin::signed(bob), post_url, bond), Error::<Test>::PostAlreadyExists);
+        assert_noop!(Bullposting::try_submit_post(RuntimeOrigin::signed(bob), post_url, bond), Error::<Test>::PostAlreadyExists);
 
         // Can submit post with a weird input
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(bob), strange_post, bond));
+        assert_ok!(Bullposting::try_submit_post(RuntimeOrigin::signed(bob), strange_post, bond));
     });
 }
 
 #[test]
-fn test_submit_vote() {
+fn test_try_submit_vote() {
     new_test_ext().execute_with(|| {
         let alice = 0;
         let bob = 1;
@@ -84,19 +84,19 @@ fn test_submit_vote() {
         System::set_block_number(1);
 
         // Call success with storage and event
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
+        assert_ok!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
 
         // Can't submit an empty post info with your vote
-        assert_noop!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), empty_vote, vote_amount, crate::Direction::Bullish), Error::<Test>::Empty);
+        assert_noop!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), empty_vote, vote_amount, crate::Direction::Bullish), Error::<Test>::Empty);
         
         // Can't vote on a non-existant post
-        assert_noop!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), fake_post_url, vote_amount, crate::Direction::Bullish), Error::<Test>::PostDoesNotExist);
+        assert_noop!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), fake_post_url, vote_amount, crate::Direction::Bullish), Error::<Test>::PostDoesNotExist);
 
         // Can't vote with more than your balance
-        assert_noop!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), 1500, crate::Direction::Bullish), Error::<Test>::InsufficientFreeBalance);
+        assert_noop!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), 1500, crate::Direction::Bullish), Error::<Test>::InsufficientFreeBalance);
 
         // Vote Bullish
-        assert_ok!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
         // Event
         System::assert_last_event(
             Event::VoteSubmitted { 
@@ -110,7 +110,7 @@ fn test_submit_vote() {
         assert_eq!(crate::Votes::<Test>::contains_key(bob, post_id), true);
 
         // Vote Bearish
-        assert_ok!(Bullposting::submit_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bearish));
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bearish));
         // Event
         System::assert_last_event(
             Event::VoteSubmitted { 
@@ -123,18 +123,18 @@ fn test_submit_vote() {
 
         // Can't cast an initial vote if you've already voted
         // Tries to change amount
-        assert_noop!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount + 50, crate::Direction::Bullish), Error::<Test>::AlreadyVoted);
+        assert_noop!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount + 50, crate::Direction::Bullish), Error::<Test>::AlreadyVoted);
         // Tries to change direction
-        assert_noop!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bearish), Error::<Test>::AlreadyVoted);
+        assert_noop!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bearish), Error::<Test>::AlreadyVoted);
 
         // Can't vote is the voting period has ended
         System::set_block_number(voting_period + 1);
-        assert_noop!(Bullposting::submit_vote(RuntimeOrigin::signed(david), post_url, vote_amount, crate::Direction::Bullish), Error::<Test>::VotingEnded);
+        assert_noop!(Bullposting::try_submit_vote(RuntimeOrigin::signed(david), post_url, vote_amount, crate::Direction::Bullish), Error::<Test>::VotingEnded);
     });
 }
 
 #[test]
-fn test_update_vote() {
+fn test_try_update_vote() {
     new_test_ext().execute_with(|| {
         let alice = 0;
         let bob = 1;
@@ -152,13 +152,13 @@ fn test_update_vote() {
         System::set_block_number(1);
 
         // Submit post
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
+        assert_ok!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
 
         // Cannot update a vote without an initial vote
-        assert_noop!(Bullposting::update_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish), Error::<Test>::VoteDoesNotExist);
+        assert_noop!(Bullposting::try_update_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish), Error::<Test>::VoteDoesNotExist);
 
         // Vote Bullish
-        assert_ok!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
         // Event
         System::assert_last_event(
             Event::VoteSubmitted { 
@@ -173,19 +173,19 @@ fn test_update_vote() {
         let initial = crate::Votes::<Test>::get(bob, post_id);
 
         // Can't submit an empty post info with your vote
-        assert_noop!(Bullposting::update_vote(RuntimeOrigin::signed(bob), empty_vote, vote_amount, crate::Direction::Bullish), Error::<Test>::Empty);
+        assert_noop!(Bullposting::try_update_vote(RuntimeOrigin::signed(bob), empty_vote, vote_amount, crate::Direction::Bullish), Error::<Test>::Empty);
         
         // Can't vote on a non-existant post
-        assert_noop!(Bullposting::update_vote(RuntimeOrigin::signed(bob), fake_post_url, vote_amount, crate::Direction::Bullish), Error::<Test>::PostDoesNotExist);
+        assert_noop!(Bullposting::try_update_vote(RuntimeOrigin::signed(bob), fake_post_url, vote_amount, crate::Direction::Bullish), Error::<Test>::PostDoesNotExist);
 
         // Can't vote with more than your balance
-        assert_noop!(Bullposting::update_vote(RuntimeOrigin::signed(bob), post_url.clone(), 1500, crate::Direction::Bullish), Error::<Test>::InsufficientFreeBalance);
+        assert_noop!(Bullposting::try_update_vote(RuntimeOrigin::signed(bob), post_url.clone(), 1500, crate::Direction::Bullish), Error::<Test>::InsufficientFreeBalance);
 
         // Someone else cannot update your vote
-        assert_noop!(Bullposting::update_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bullish), Error::<Test>::VoteDoesNotExist);
+        assert_noop!(Bullposting::try_update_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bullish), Error::<Test>::VoteDoesNotExist);
         
         // Successful vote update to Bearish with higher vote
-        assert_ok!(Bullposting::update_vote(RuntimeOrigin::signed(bob), post_url.clone(), new_vote_amount, crate::Direction::Bearish));
+        assert_ok!(Bullposting::try_update_vote(RuntimeOrigin::signed(bob), post_url.clone(), new_vote_amount, crate::Direction::Bearish));
         // Event
         System::assert_last_event(
             Event::VoteUpdated { 
@@ -200,7 +200,7 @@ fn test_update_vote() {
         assert_ne!(initial, new);
 
         // Successful vote update to Bearish with higher vote
-        assert_ok!(Bullposting::update_vote(RuntimeOrigin::signed(bob), post_url.clone(), new_vote_amount - 100, crate::Direction::Bullish));
+        assert_ok!(Bullposting::try_update_vote(RuntimeOrigin::signed(bob), post_url.clone(), new_vote_amount - 100, crate::Direction::Bullish));
         // Event
         System::assert_last_event(
             Event::VoteUpdated { 
@@ -216,13 +216,13 @@ fn test_update_vote() {
 
         // Can't vote is the voting period has ended
         System::set_block_number(voting_period + 1);
-        assert_noop!(Bullposting::update_vote(RuntimeOrigin::signed(bob), post_url, vote_amount, crate::Direction::Bullish), Error::<Test>::VotingEnded);
+        assert_noop!(Bullposting::try_update_vote(RuntimeOrigin::signed(bob), post_url, vote_amount, crate::Direction::Bullish), Error::<Test>::VotingEnded);
 
     });
 }
 
 #[test]
-fn test_resolve_post() {
+fn test_try_resolve_post() {
     new_test_ext().execute_with(|| {
         let alice = 0;
         let bob = 1;
@@ -241,28 +241,28 @@ fn test_resolve_post() {
         System::set_block_number(1);
 
         // Submit post
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post_2_url.clone(), bond));
+        assert_ok!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
+        assert_ok!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_2_url.clone(), bond));
 
         // Vote
-        assert_ok!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
-        assert_ok!(Bullposting::submit_vote(RuntimeOrigin::signed(charlie), post_2_url.clone(), vote_amount, crate::Direction::Bearish));
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(charlie), post_2_url.clone(), vote_amount, crate::Direction::Bearish));
 
 
         // Cannot resolve during the voting period
-        assert_noop!(Bullposting::resolve_post(RuntimeOrigin::signed(alice), post_url.clone()), Error::<Test>::VotingStillOngoing);
+        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(alice), post_url.clone()), Error::<Test>::VotingStillOngoing);
 
         // End voting period
         System::set_block_number(voting_period + 1);
 
         // Error if submit an empty input for the post
-        assert_noop!(Bullposting::resolve_post(RuntimeOrigin::signed(alice), empty_post), Error::<Test>::Empty);
+        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(alice), empty_post), Error::<Test>::Empty);
 
         // Error if submit an empty input for the post
-        assert_noop!(Bullposting::resolve_post(RuntimeOrigin::signed(alice), fake_post_url), Error::<Test>::PostDoesNotExist);
+        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(alice), fake_post_url), Error::<Test>::PostDoesNotExist);
 
         // Resolve the post
-        assert_ok!(Bullposting::resolve_post(RuntimeOrigin::signed(alice), post_url.clone()));
+        assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(alice), post_url.clone()));
         // Switch which of the below events is commented out and change `pub const RewardStyle: bool` in mock.rs
         // Rewarded event with RewardStyle = false (FlatReward)
         // System::assert_last_event(
@@ -286,10 +286,10 @@ fn test_resolve_post() {
         );
 
         // Error if the post has already been resolved
-        assert_noop!(Bullposting::resolve_post(RuntimeOrigin::signed(bob), post_url), Error::<Test>::PostAlreadyResolved);
+        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url), Error::<Test>::PostAlreadyResolved);
 
         // Post can be resolved by someone who is not the submitter
-        assert_ok!(Bullposting::resolve_post(RuntimeOrigin::signed(bob), post_2_url.clone()));
+        assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_2_url.clone()));
         // Switch which of the below events is commented out and change `pub const SlashStyle: bool` in mock.rs
         // Slashed event with SlashStyle = false (FlatSlash)
         // System::assert_last_event(
@@ -315,7 +315,7 @@ fn test_resolve_post() {
 }
 
 #[test]
-fn test_unfreeze_vote() {
+fn test_try_unfreeze_vote() {
     new_test_ext().execute_with(|| {
         let alice = 0;
         let bob = 1;
@@ -333,32 +333,32 @@ fn test_unfreeze_vote() {
         System::set_block_number(1);
 
         // Submit post
-        assert_ok!(Bullposting::submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
+        assert_ok!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
         // Vote on post
-        assert_ok!(Bullposting::submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
-        assert_ok!(Bullposting::submit_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bearish));
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bearish));
 
         // End voting period
         System::set_block_number(voting_period + 1);
 
         // Error if the post is not yet resolved
-        assert_noop!(Bullposting::unfreeze_vote(RuntimeOrigin::signed(bob), bob, post_url.clone()), Error::<Test>::PostUnresolved);
+        assert_noop!(Bullposting::try_unfreeze_vote(RuntimeOrigin::signed(bob), bob, post_url.clone()), Error::<Test>::PostUnresolved);
 
         // Resolve post
-        assert_ok!(Bullposting::resolve_post(RuntimeOrigin::signed(alice), post_url.clone()));
+        assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(alice), post_url.clone()));
 
         // Error on empty post input
-        assert_noop!(Bullposting::unfreeze_vote(RuntimeOrigin::signed(bob), bob, empty_post.clone()), Error::<Test>::Empty);
+        assert_noop!(Bullposting::try_unfreeze_vote(RuntimeOrigin::signed(bob), bob, empty_post.clone()), Error::<Test>::Empty);
 
         // Error if the post does not exist
-        assert_noop!(Bullposting::unfreeze_vote(RuntimeOrigin::signed(bob), bob, fake_post_url), Error::<Test>::PostDoesNotExist);
+        assert_noop!(Bullposting::try_unfreeze_vote(RuntimeOrigin::signed(bob), bob, fake_post_url), Error::<Test>::PostDoesNotExist);
 
         // Error if that vote never existed
-        assert_noop!(Bullposting::unfreeze_vote(RuntimeOrigin::signed(bob), david, post_url.clone()), Error::<Test>::VoteDoesNotExist);
+        assert_noop!(Bullposting::try_unfreeze_vote(RuntimeOrigin::signed(bob), david, post_url.clone()), Error::<Test>::VoteDoesNotExist);
 
 
         // Successfully unfreeze a vote
-        assert_ok!(Bullposting::unfreeze_vote(RuntimeOrigin::signed(bob), bob, post_url.clone()));
+        assert_ok!(Bullposting::try_unfreeze_vote(RuntimeOrigin::signed(bob), bob, post_url.clone()));
         // Event
         System::assert_last_event(
             Event::VoteUnfrozen { 
@@ -370,7 +370,7 @@ fn test_unfreeze_vote() {
         // Check vote was removed from storage
         assert_eq!(crate::Votes::<Test>::contains_key(bob, post_id), false);
 
-        assert_ok!(Bullposting::unfreeze_vote(RuntimeOrigin::signed(bob), charlie, post_url.clone()));
+        assert_ok!(Bullposting::try_unfreeze_vote(RuntimeOrigin::signed(bob), charlie, post_url.clone()));
         // Event
         System::assert_last_event(
             Event::VoteUnfrozen { 
@@ -383,6 +383,6 @@ fn test_unfreeze_vote() {
         assert_eq!(crate::Votes::<Test>::contains_key(charlie, post_id), false);
 
         // Error if that vote no longer exists (already unfrozen)
-        assert_noop!(Bullposting::unfreeze_vote(RuntimeOrigin::signed(bob), bob, post_url), Error::<Test>::VoteDoesNotExist);
+        assert_noop!(Bullposting::try_unfreeze_vote(RuntimeOrigin::signed(bob), bob, post_url), Error::<Test>::VoteDoesNotExist);
     });
 }

@@ -35,12 +35,14 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     // Other imports
+    // TODO: CONSOLIDATE
     use codec::MaxEncodedLen;
     use scale_info::prelude::{fmt::Debug, vec::Vec};
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
     use frame_support::sp_runtime::traits::{CheckedSub, Zero};
     use frame_support::sp_runtime::{Permill, Percent};
+    use frame_support::BoundedVec;
 
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
@@ -108,6 +110,11 @@ pub mod pallet {
         /// The number of blocks that votes will last.
         #[pallet::constant]
         type VotingPeriod: Get<BlockNumberFor<Self>>;
+
+        /// The allowed length of the "URL" (or other) input into functions.
+        // TODO: SHOULD BE GET<U16> BUT ERRORS, FIGURE OUT WHY
+        #[pallet::constant]
+        type MaxUrlLength: Get<u32>;
 
 
     }
@@ -240,6 +247,8 @@ pub mod pallet {
     /// information.
     #[pallet::error]
     pub enum Error<T> {
+        /// Submitted URL input was too long (acceptable length configured in runtime).
+        InputTooLong,
         /// Submitted URL was empty.
         Empty,
         /// Post already submitted.
@@ -277,31 +286,175 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Submits a post to the chain for voting.
-        /// If the post is ultimately voted as bullish, they will get 2x their bond.
-        /// If it is voted as bearish, they lose their bond.
-        /// If there is a tie, their tokens are simply unlocked.
+        /// If the post is ultimately voted as bullish, they will receive a reward.
+        /// If it is voted as bearish, they will be slashed.
+        /// Rewards and slashes are configured in the runtime.
         ///
-        /// It checks that the post has not already been submitted in the past,
-        /// and that the submitter has enough free tokens to bond.
+        /// ## Errors
         ///
-        /// The post is then stored with who submitted it, and their tokens are bonded.
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
+        /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
+        /// - If the submitter does not have sufficient free tokens to bond ([`Error::InsufficientFreeBalance`])
+        #[pallet::call_index(0)]
+        #[pallet::weight(Weight::default())]
+        pub fn try_submit_post(
+            origin: OriginFor<T>,
+            post_url: Vec<u8>,
+            bond: BalanceOf<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            // Ensure the post input is not empty
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+
+            // Convert the post input into a bounded vec to use in the actual logic, errors if too long
+            let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
+
+
+            Self::submit_post(who, bounded, bond)?;
+
+            Ok(())
+        }
+
+        /// Submits a vote on whether a particular post is bullish or bearish.
         ///
         /// ## Errors
         ///
         /// The function will return an error under the following conditions:
         ///
         /// - If they submit nothing for the post_url ([`Error::Empty`])
-        /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
-        /// - If the submitter does not have sufficient free tokens to bond ([`Error::InsufficientFreeBalance`])
-        #[pallet::call_index(0)]
+        /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
+        /// - If the post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the voting has already ended ([`Error::VotingEnded`])
+        /// - If they have already voted once ([`Error::AlreadyVoted`])
+        /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
+        #[pallet::call_index(1)]
         #[pallet::weight(Weight::default())]
-        pub fn submit_post(
+        pub fn try_submit_vote(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
-            bond: BalanceOf<T>,
+            vote_amount: BalanceOf<T>,
+            direction: Direction,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            // Ensure the post input is not empty
             ensure!(!post_url.is_empty(), Error::<T>::Empty);
+
+            // Convert the post input into a bounded vec to use in the actual logic, errors if too long
+            let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
+
+            Self::submit_vote(who, bounded, vote_amount, direction)?;
+
+            Ok(())
+        }
+
+
+        /// Updates an account's vote and freeze accordingly. Only possible before a vote is resolved.
+        ///
+        /// ## Errors
+        ///
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
+        /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
+        /// - If the post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the voting has already ended ([`Error::VotingEnded`])
+        /// - If this particular vote doesn't exist (['Error::VoteDoesNotExist'])
+        /// - If the user does not have enough balance for their new vote ([`Error::InsufficientBalance`])
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::default())]
+        pub fn try_update_vote(
+            origin: OriginFor<T>,
+            post_url: Vec<u8>,
+            new_vote: BalanceOf<T>,
+            direction: Direction
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            // Ensure the post input is not empty
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+
+            // Convert the post input into a bounded vec to use in the actual logic, errors if too long
+            let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
+
+            Self::update_vote(who, bounded, new_vote, direction)?;
+            
+            Ok(())
+        }
+
+
+        /// Resolves a post, rewarding or slashing the submitter and enabling unfreeze_vote.
+        /// Callable by anyone.
+        ///
+        /// ## Errors
+        ///
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
+        /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
+        /// - If the post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the vote is still in progress ([`Error::VotingStillOngoing`])
+        /// - If the vote has already been resolved ([`Error::PostAlreadyResolved`])
+        #[pallet::call_index(3)]
+        #[pallet::weight(Weight::default())]
+        pub fn try_resolve_post(
+            origin: OriginFor<T>,
+            post_url: Vec<u8>
+        ) -> DispatchResult {
+            let _who = ensure_signed(origin)?;
+            // Ensure the post input is not empty
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+
+            // Convert the post input into a bounded vec to use in the actual logic, errors if too long
+            let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
+
+            Self::resolve_post(bounded)?;
+
+            Ok(())
+        }
+
+
+        /// Unfreezes the tokens used in a user's vote.
+        /// Callable by anyone.
+        ///
+        /// ## Errors
+        ///
+        /// The function will return an error under the following conditions:
+        ///
+        /// - If they submit nothing for the post_url ([`Error::Empty`])
+        /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
+        /// - If the post does not exist ([`Error::PostDoesNotExist`])
+        /// - If the vote is unresolved ([`Error::PostUnresolved`])
+        /// - If this particular vote no longer exists (already unfrozen) or never existed (['Error::VoteDoesNotExist'])
+        #[pallet::call_index(4)]
+        #[pallet::weight(Weight::default())]
+        pub fn try_unfreeze_vote(
+            origin: OriginFor<T>,
+            account: T::AccountId,
+            post_url: Vec<u8>
+        ) -> DispatchResult {
+            let _who = ensure_signed(origin)?;
+            // Ensure the post input is not empty
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+
+            // Convert the post input into a bounded vec to use in the actual logic, errors if too long
+            let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
+
+            Self::unfreeze_vote(account, bounded)?;
+
+            Ok(())
+        }
+    }
+
+
+
+    impl<T: Config> Pallet<T> {
+        pub(crate) fn submit_post(
+            who: T::AccountId,
+            post_url: BoundedVec<u8, T::MaxUrlLength>,
+            bond: BalanceOf<T>
+        ) -> DispatchResult {
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Checks if the post exists
@@ -315,7 +468,8 @@ pub mod pallet {
             // Bonds the submitter's balance
             T::NativeBalance::hold(&HoldReason::PostBond.into(), &who, bond)?;
 
-            let voting_until = frame_system::Pallet::<T>::block_number() + T::VotingPeriod::get();
+            let voting_until = frame_system::Pallet::<T>::block_number() +
+            T::VotingPeriod::get();
 
             // Stores the submitter and bond info
             Posts::<T>::insert(&id, Post {
@@ -328,32 +482,21 @@ pub mod pallet {
             });
 
             // Emit an event.
-            Self::deposit_event(Event::PostSubmitted { id, submitter: who, bond, voting_until });
+            Self::deposit_event(Event::PostSubmitted {
+                id,
+                submitter: who,
+                bond, voting_until
+            });
 
             Ok(())
         }
 
-        /// Submits a vote on whether a particular post is bullish or bearish.
-        ///
-        /// ## Errors
-        ///
-        /// The function will return an error under the following conditions:
-        ///
-        /// - If they submit nothing for the post_url ([`Error::Empty`])
-        /// - If the post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the voting has already ended ([`Error::VotingEnded`])
-        /// - If they have already voted once ([`Error::AlreadyVoted`])
-        /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
-        #[pallet::call_index(1)]
-        #[pallet::weight(Weight::default())]
-        pub fn submit_vote(
-            origin: OriginFor<T>,
-            post_url: Vec<u8>,
+        pub(crate) fn submit_vote(
+            who: T::AccountId,
+            post_url: BoundedVec<u8, T::MaxUrlLength>,
             vote_amount: BalanceOf<T>,
             direction: Direction,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
@@ -406,28 +549,12 @@ pub mod pallet {
             Ok(())
         }
 
-
-        /// Updates an account's vote and freeze accordingly. Only possible before a vote is resolved.
-        ///
-        /// ## Errors
-        ///
-        /// The function will return an error under the following conditions:
-        ///
-        /// - If they submit nothing for the post_url ([`Error::Empty`])
-        /// - If the post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the voting has already ended ([`Error::VotingEnded`])
-        /// - If this particular vote doesn't exist (['Error::VoteDoesNotExist'])
-        /// - If the user does not have enough balance for their new vote ([`Error::InsufficientBalance`])
-        #[pallet::call_index(2)]
-        #[pallet::weight(Weight::default())]
-        pub fn update_vote(
-            origin: OriginFor<T>,
-            post_url: Vec<u8>,
+        pub(crate) fn update_vote(
+            who: T::AccountId,
+            post_url: BoundedVec<u8, T::MaxUrlLength>,
             new_vote: BalanceOf<T>,
             direction: Direction
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
@@ -495,27 +622,12 @@ pub mod pallet {
                 direction,
             });
 
-            
             Ok(())
         }
 
-
-        /// Resolves a post, rewarding or slashing the submitter and enabling unfreeze_vote.
-        /// Callable by anyone.
-        ///
-        /// ## Errors
-        ///
-        /// The function will return an error under the following conditions:
-        ///
-        /// - If they submit nothing for the post_url ([`Error::Empty`])
-        /// - If the post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the vote is still in progress ([`Error::VotingStillOngoing`])
-        /// - If the vote has already been resolved ([`Error::PostAlreadyResolved`])
-        #[pallet::call_index(3)]
-        #[pallet::weight(Weight::default())]
-        pub fn resolve_post(origin: OriginFor<T>, post_url: Vec<u8>) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+        pub(crate) fn resolve_post(
+            post_url: BoundedVec<u8, T::MaxUrlLength>
+        ) -> DispatchResult {
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
@@ -582,23 +694,10 @@ pub mod pallet {
             Ok(())
         }
 
-
-        /// Unfreezes the tokens used in a user's vote.
-        /// Callable by anyone.
-        ///
-        /// ## Errors
-        ///
-        /// The function will return an error under the following conditions:
-        ///
-        /// - If they submit nothing for the post_url ([`Error::Empty`])
-        /// - If the post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the vote is unresolved ([`Error::PostUnresolved`])
-        /// - If this particular vote no longer exists (already unfrozen) or never existed (['Error::VoteDoesNotExist'])
-        #[pallet::call_index(4)]
-        #[pallet::weight(Weight::default())]
-        pub fn unfreeze_vote(origin: OriginFor<T>, account: T::AccountId, post_url: Vec<u8>,) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+        pub(crate) fn unfreeze_vote(
+            who: T::AccountId,
+            post_url: BoundedVec<u8, T::MaxUrlLength>
+        ) -> DispatchResult {
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
@@ -609,27 +708,23 @@ pub mod pallet {
             ensure!(post_struct.resolved, Error::<T>::PostUnresolved);
 
             // Error if this particular vote no longer exists or never existed.
-            ensure!(Votes::<T>::contains_key(&account, &id), Error::<T>::VoteDoesNotExist);
-            let (amount, _direction) = Votes::<T>::take(&account, id);
+            ensure!(Votes::<T>::contains_key(&who, &id), Error::<T>::VoteDoesNotExist);
+            let (amount, _direction) = Votes::<T>::take(&who, id);
             
             // Remove freeze
-            <<T as Config>::NativeBalance>::decrease_frozen(&FreezeReason::Vote.into(), &account, amount.clone())?;
+            <<T as Config>::NativeBalance>::decrease_frozen(&FreezeReason::Vote.into(), &who, amount.clone())?;
 
             // Emit an event
             Self::deposit_event(Event::VoteUnfrozen {
                 id,
-                account,
+                account: who,
                 amount,
             });
             
 
             Ok(())
         }
-    }
-
-
-
-    impl<T: Config> Pallet<T> {
+        
         // Reward a flat amount
         pub(crate) fn reward_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
             let reward = T::FlatReward::get().into();

@@ -39,6 +39,7 @@ type BlockNumber = u64;
 
 parameter_types! {
     pub const VotingPeriod: BlockNumber = 1000;
+    pub const MaxUrlLength: u32 = u32::MAX;
     // false = FlatReward, true = RewardCoefficient
     pub const RewardStyle: bool = true;
     pub const FlatReward: u32 = 500;
@@ -46,7 +47,7 @@ parameter_types! {
     // false = FlatSlash, true = SlashCoefficient
     pub const SlashStyle: bool = true;
     pub const FlatSlash: u32 = 500;
-    pub const SlashCoefficient: u8 = 100 ;
+    pub const SlashCoefficient: u8 = 100;
 }
 
 impl pallet_bullposting::Config for Test {
@@ -63,6 +64,7 @@ impl pallet_bullposting::Config for Test {
     type FlatSlash = FlatSlash;
     type SlashCoefficient = SlashCoefficient;
     type VotingPeriod = VotingPeriod;
+    type MaxUrlLength = MaxUrlLength;
 }
 
 // Build genesis storage according to the mock runtime.
