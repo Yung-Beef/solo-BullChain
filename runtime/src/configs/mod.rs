@@ -58,6 +58,18 @@ parameter_types! {
 	);
 	pub RuntimeBlockLength: BlockLength = BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
 	pub const SS58Prefix: u8 = 42;
+
+	pub const VotingPeriod: BlockNumber = 1000;
+    pub const BondMinimum: u32 = 50;
+    pub const MaxUrlLength: u32 = u32::MAX;
+    // false = FlatReward, true = RewardCoefficient
+    pub const RewardStyle: bool = true;
+    pub const FlatReward: u32 = 500;
+    pub const RewardCoefficient: u32 = 100;
+    // false = FlatSlash, true = SlashCoefficient
+    pub const SlashStyle: bool = true;
+    pub const FlatSlash: u32 = 500;
+    pub const SlashCoefficient: u8 = 100;
 }
 
 /// The default types are being injected by [`derive_impl`](`frame_support::derive_impl`) from
@@ -156,13 +168,20 @@ impl pallet_sudo::Config for Runtime {
 }
 
 /// Configure the pallet-bullposting in pallets/bullposting.
-// TODO: implement
-// impl pallet_bullposting::Config for Runtime {
-//     type RuntimeEvent = RuntimeEvent;
-//     type WeightInfo = pallet_bullposting::weights::SubstrateWeight<Runtime>;
-//     // TODO: update
-//     type Post = [u8; 8];
-//     // type Currency = u128;
-//     type NativeBalance = u128;
-//     type RuntimeHoldReason = RuntimeHoldReason;
-// }
+impl pallet_bullposting::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_bullposting::weights::SubstrateWeight<Runtime>;
+	type NativeBalance = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type RuntimeFreezeReason = RuntimeFreezeReason;
+    type FreezeIdentifier = ();
+    type RewardStyle = RewardStyle;
+    type FlatReward = FlatReward;
+    type RewardCoefficient = RewardCoefficient;
+    type SlashStyle = SlashStyle;
+    type FlatSlash = FlatSlash;
+    type SlashCoefficient = SlashCoefficient;
+    type VotingPeriod = VotingPeriod;
+    type MaxUrlLength = MaxUrlLength;
+    type BondMinimum = BondMinimum;
+}

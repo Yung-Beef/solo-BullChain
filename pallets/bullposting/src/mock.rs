@@ -39,6 +39,7 @@ type BlockNumber = u64;
 
 parameter_types! {
     pub const VotingPeriod: BlockNumber = 1000;
+    pub const BondMinimum: u32 = 50;
     pub const MaxUrlLength: u32 = u32::MAX;
     // false = FlatReward, true = RewardCoefficient
     pub const RewardStyle: bool = true;
@@ -65,6 +66,7 @@ impl pallet_bullposting::Config for Test {
     type SlashCoefficient = SlashCoefficient;
     type VotingPeriod = VotingPeriod;
     type MaxUrlLength = MaxUrlLength;
+    type BondMinimum = BondMinimum;
 }
 
 // Build genesis storage according to the mock runtime.

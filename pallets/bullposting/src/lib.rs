@@ -111,6 +111,10 @@ pub mod pallet {
         #[pallet::constant]
         type VotingPeriod: Get<BlockNumberFor<Self>>;
 
+        /// The minimum bond size accepted, bonds BELOW this number will be rejected.
+        #[pallet::constant]
+        type BondMinimum: Get<u32>;
+
         /// The allowed length of the "URL" (or other) input into functions.
         // TODO: SHOULD BE GET<U16> BUT ERRORS, FIGURE OUT WHY
         #[pallet::constant]
@@ -251,6 +255,8 @@ pub mod pallet {
         InputTooLong,
         /// Submitted URL was empty.
         Empty,
+        /// Attempted bond was below the BondMinimum configured in the runtime.
+        BondTooLow,
         /// Post already submitted.
         PostAlreadyExists,
         /// Insufficient available balance.
@@ -308,6 +314,8 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             // Ensure the post input is not empty
             ensure!(!post_url.is_empty(), Error::<T>::Empty);
+
+            ensure!(bond >= T::BondMinimum::get().into(), Error::<T>::BondTooLow);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;

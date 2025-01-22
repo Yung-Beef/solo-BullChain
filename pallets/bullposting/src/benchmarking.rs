@@ -31,22 +31,32 @@ use frame_system::RawOrigin;
 //         assert_eq!(Something::<T>::get(), Some(101u32));
 //     }
 
-//     #[benchmark]
-//     fn submit_post() {
-//         let alice = 0;
-//         let bond = u64::Max - 1;
-//         let balance = u64::Max;
-//         let voting_period = u64::Max;
-//         let post_url: Vec<u8> = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
-//         let post_id = sp_io::hashing::blake2_256(&post_url);
-//         let empty_post: Vec<u8> = "".into();
-//         let strange_post: Vec<u8> = "1234234asd!#%2lvliasdè÷ĳˇԦץڷॷ✗㈧倨".into();
+let max_posts = BalanceOf::<T>::total_issuance() / T::BondMinimum::get();
 
-//         Balances::<T>::force_set_balance(RuntimeOrigin::root(), alice, balance);
+    #[benchmark]
+    fn submit_post(
+		p: Linear<0, T::MaxUrlLength::get()>,
+		b: Linear<0, BalanceOf::<T>::max_value()>,
+		s: Linear<0, max_posts>,
+	) -> Result<(), BenchmarkError>{
+		let horrible_post: Vec<u8> = [倨; T::MaxUrlLength::get()].into();
+		let alice: T::AccountId = account("Alice", 0, SEED);
+		let bob: T::AccountId = account("Bob", 0, SEED);
 
-//         #[extrinsic_call]
+        Balances::<T>::force_set_balance(RuntimeOrigin::root(), alice, BalanceOf::<T>::max_value());
+		Balances::<T>::force_set_balance(RuntimeOrigin::root(), bob, BalanceOf::<T>::max_value());
 
-//     }
+		for i in 0..s {
+			let vec: Vec<u8> = [g; p];
+			try_submit_post(alice, vec, b);
+		}
+
+        #[extrinsic_call]
+		try_submit_post<T::RuntimeOrigin>(bob, horrible_post, (BalanceOf::<T>::max_value - 1))
+
+		ensure!(T::Posts::contains_key(horrible_post), "Post not submitted");
+		Ok(())
+    }
 
 //     #[benchmark]
 //     fn submit_vote() {

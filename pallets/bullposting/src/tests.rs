@@ -27,6 +27,7 @@ fn test_try_submit_post() {
         // Cannot submit an empty post
         assert_noop!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), empty_post, bond), Error::<Test>::Empty);
 
+        assert_noop!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), 25), Error::<Test>::BondTooLow);
 
         // Cannot bond more tokens than you have available
         assert_noop!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond + 1), Error::<Test>::InsufficientFreeBalance);

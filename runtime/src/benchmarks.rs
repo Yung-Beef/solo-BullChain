@@ -29,6 +29,5 @@ frame_benchmarking::define_benchmarks!(
     [pallet_balances, Balances]
     [pallet_timestamp, Timestamp]
     [pallet_sudo, Sudo]
-    // TODO: implement
-    // [pallet_bullposting, BullpostingModule]
+    [pallet_bullposting, Bullposting]
 );

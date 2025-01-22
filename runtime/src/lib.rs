@@ -219,7 +219,6 @@ mod runtime {
 	pub type Sudo = pallet_sudo;
 
     // Include the custom logic from the pallet-bullposting in the runtime.
-    // TODO: implement
-    // #[runtime::pallet_index(7)]
-    // pub type BullpostingModule = pallet_bullposting;
+    #[runtime::pallet_index(7)]
+    pub type Bullposting = pallet_bullposting;
 }
