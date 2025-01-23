@@ -6,40 +6,27 @@ use super::*;
 use crate::Pallet as BullPosting;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
+use frame_support::{ensure, traits::{Get, fungible, fungible::Inspect}};
 
-// #[benchmarks]
-// mod benchmarks {
-//     use super::*;
+fn max_url_length<T: Config>() -> u32 {
+	T::MaxUrlLength::get()
+}
 
-//     #[benchmark]
-//     fn do_something() {
-//         let value = 100u32;
-//         let caller: T::AccountId = whitelisted_caller();
-//         #[extrinsic_call]
-//         do_something(RawOrigin::Signed(caller), value);
+fn max_posts<T: Config>() -> <<T as Config>::NativeBalance as fungible::Inspect<<T as frame_system::Config>::AccountId>>::Balance {
+	T::NativeBalance::total_issuance() / T::BondMinimum::get().into()
+}
 
-//         assert_eq!(Something::<T>::get(), Some(value));
-//     }
-
-//     #[benchmark]
-//     fn cause_error() {
-//         Something::<T>::put(100u32);
-//         let caller: T::AccountId = whitelisted_caller();
-//         #[extrinsic_call]
-//         cause_error(RawOrigin::Signed(caller));
-
-//         assert_eq!(Something::<T>::get(), Some(101u32));
-//     }
-
-let max_posts = BalanceOf::<T>::total_issuance() / T::BondMinimum::get();
+#[benchmarks]
+mod benchmarks {
+    use super::*;
 
     #[benchmark]
     fn submit_post(
-		p: Linear<0, T::MaxUrlLength::get()>,
-		b: Linear<0, BalanceOf::<T>::max_value()>,
-		s: Linear<0, max_posts>,
+		p: Linear<0, { max_url_length() }>,
+		b: Linear<0, { T::NativeBalance::max_value() }>,
+		s: Linear<0, { max_posts() }>,
 	) -> Result<(), BenchmarkError>{
-		let horrible_post: Vec<u8> = [倨; T::MaxUrlLength::get()].into();
+		let horrible_post: Vec<u8> = ["倨"; T::MaxUrlLength::get()].into();
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
 
@@ -47,12 +34,12 @@ let max_posts = BalanceOf::<T>::total_issuance() / T::BondMinimum::get();
 		Balances::<T>::force_set_balance(RuntimeOrigin::root(), bob, BalanceOf::<T>::max_value());
 
 		for i in 0..s {
-			let vec: Vec<u8> = [g; p];
+			let vec: Vec<u8> = ["g"; p];
 			try_submit_post(alice, vec, b);
 		}
 
         #[extrinsic_call]
-		try_submit_post<T::RuntimeOrigin>(bob, horrible_post, (BalanceOf::<T>::max_value - 1))
+		try_submit_post::<T::RuntimeOrigin>(bob, horrible_post, (BalanceOf::<T>::max_value - 1));
 
 		ensure!(T::Posts::contains_key(horrible_post), "Post not submitted");
 		Ok(())
@@ -87,4 +74,4 @@ let max_posts = BalanceOf::<T>::total_issuance() / T::BondMinimum::get();
 //     }
 
 //     impl_benchmark_test_suite!(BullPosting, crate::mock::new_test_ext(), crate::mock::Test);
-// }
+}
