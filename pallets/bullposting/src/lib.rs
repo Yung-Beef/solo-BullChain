@@ -123,7 +123,7 @@ pub mod pallet {
 
     }
 
-    type BalanceOf<T> =
+    pub type BalanceOf<T> =
         <<T as Config>::NativeBalance as fungible::Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
     /// Used for the direction of votes and results
