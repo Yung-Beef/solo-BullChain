@@ -10,9 +10,9 @@ use frame_support::traits::{Get, fungible::{Inspect, Mutate}};
 use frame_support::sp_runtime::*;
 
 const SEED: u32 = 0;
-const MAX_POSTS: u32 = u32::MAX;
-const MAX_URL: usize = 4294967295;
-const MAX_URL32: u32 = u32::MAX;
+const MAX_POSTS: u32 = 2000;
+const MAX_URL: usize = 2000;
+const MAX_URL32: u32 = 2000;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 	frame_system::Pallet::<T>::assert_last_event(generic_event.into());
@@ -22,9 +22,18 @@ fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 mod benchmarks {
     use super::*;
 
-	fn setup_storage(count: u32) {
+	fn setup_storage<T: Config>(count: u32) {
 		// submit a post `count` times to fill the storage up
-		
+		let alice: T::AccountId = account("Alice", 0, SEED);
+		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
+		let one = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1u32.into());
+
+		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
+
+		for i in 0..=count {
+			let s: String = i.to_string();
+			let _ = BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), s, one);
+		}
 	}
 
     #[benchmark]
@@ -43,11 +52,7 @@ mod benchmarks {
         <T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		// let storage_filler: [Vec<u8>; MAX_POSTS.into()];
-		// for i in 0..s {
-		// 	storage_filler.insert(i);
-		// 	try_submit_post::<<T as pallet::Config>::RawOrigin>(alice, storage_filler[i], b);
-		// }
+		setup_storage::<T>(s);
 
         #[extrinsic_call]
 		try_submit_post(RawOrigin::Signed(bob.clone()), horrible_post, balance.saturating_sub(1u32.into()));
