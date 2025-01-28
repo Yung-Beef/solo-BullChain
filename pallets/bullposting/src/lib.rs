@@ -308,14 +308,16 @@ pub mod pallet {
         #[pallet::weight(Weight::default())]
         pub fn try_submit_post(
             origin: OriginFor<T>,
-            post_url: Vec<u8>,
+            input: String,
             bond: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            ensure!(!input.is_empty(), Error::<T>::Empty);
 
             ensure!(bond >= T::BondMinimum::get().into(), Error::<T>::BondTooLow);
+
+            let post_url: Vec<u8> = String::into_bytes(input);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
@@ -342,13 +344,15 @@ pub mod pallet {
         #[pallet::weight(Weight::default())]
         pub fn try_submit_vote(
             origin: OriginFor<T>,
-            post_url: Vec<u8>,
+            input: String,
             vote_amount: BalanceOf<T>,
             direction: Direction,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            ensure!(!input.is_empty(), Error::<T>::Empty);
+
+            let post_url: Vec<u8> = String::into_bytes(input);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
@@ -375,13 +379,15 @@ pub mod pallet {
         #[pallet::weight(Weight::default())]
         pub fn try_update_vote(
             origin: OriginFor<T>,
-            post_url: Vec<u8>,
+            input: String,
             new_vote: BalanceOf<T>,
             direction: Direction
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            ensure!(!input.is_empty(), Error::<T>::Empty);
+
+            let post_url: Vec<u8> = String::into_bytes(input);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
@@ -408,11 +414,13 @@ pub mod pallet {
         #[pallet::weight(Weight::default())]
         pub fn try_resolve_post(
             origin: OriginFor<T>,
-            post_url: Vec<u8>
+            input: String,
         ) -> DispatchResult {
             let _who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            ensure!(!input.is_empty(), Error::<T>::Empty);
+
+            let post_url: Vec<u8> = String::into_bytes(input);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
@@ -440,11 +448,13 @@ pub mod pallet {
         pub fn try_unfreeze_vote(
             origin: OriginFor<T>,
             account: T::AccountId,
-            post_url: Vec<u8>
+            input: String,
         ) -> DispatchResult {
             let _who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!post_url.is_empty(), Error::<T>::Empty);
+            ensure!(!input.is_empty(), Error::<T>::Empty);
+
+            let post_url: Vec<u8> = String::into_bytes(input);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;

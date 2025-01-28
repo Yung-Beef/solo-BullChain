@@ -6,46 +6,61 @@ use super::*;
 use crate::Pallet as BullPosting;
 use frame_benchmarking::v2::*;
 use frame_system::{RawOrigin};
-use frame_support::{ensure, traits::{Get, fungible, fungible::{Inspect, Mutate}, tokens::Balance}, sp_runtime::traits::Bounded};
+use frame_support::traits::{Get, fungible::{Inspect, Mutate}};
+use frame_support::sp_runtime::*;
 
 const SEED: u32 = 0;
 const MAX_POSTS: u32 = u32::MAX;
-const MAX_URL: u32 = u32::MAX;
+const MAX_URL: usize = 4294967295;
+const MAX_URL32: u32 = u32::MAX;
 
-fn max_url_length<T: Config>() -> u32 {
-	T::MaxUrlLength::get()
+fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
+	frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
 #[benchmarks]
 mod benchmarks {
     use super::*;
 
+	fn setup_storage(count: u32) {
+		// submit a post `count` times to fill the storage up
+		
+	}
+
     #[benchmark]
     fn submit_post<T: Config>(
-		p: Linear<0, u32::MAX>,
+		p: Linear<0, MAX_URL32>,
 		b: Linear<0, u32::MAX>,
 		s: Linear<0, MAX_POSTS>,
 	) -> Result<(), BenchmarkError>{
-		let horrible_post: Vec<u8> = ["倨"; T::MaxUrlLength::get().into()];
+		let horrible_post: String = String::from_iter(["倨"; MAX_URL]);
+		let post_vec: Vec<u8> = String::into_bytes(horrible_post.clone());
+		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post_vec);
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
-		let length = T::MaxUrlLength::get().into();
-		let balance: BalanceOf<T> = u64::MAX.into();
+		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
 
         <T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		let storage_filler: [Vec<u8>; MAX_POSTS.into()];
-
-		for i in 0..s {
-			storage_filler.insert(i);
-			try_submit_post(alice, storage_filler[i], b);
-		}
+		// let storage_filler: [Vec<u8>; MAX_POSTS.into()];
+		// for i in 0..s {
+		// 	storage_filler.insert(i);
+		// 	try_submit_post::<<T as pallet::Config>::RawOrigin>(alice, storage_filler[i], b);
+		// }
 
         #[extrinsic_call]
-		try_submit_post::<<T as pallet::Config>::RawOrigin>(bob, horrible_post, balance - 1);
+		try_submit_post(RawOrigin::Signed(bob.clone()), horrible_post, balance.saturating_sub(1u32.into()));
 
-		ensure!(<T as pallet::Config>::Posts::contains_key(horrible_post), "Post not submitted");
+		let voting_until = frame_system::Pallet::<T>::block_number() +
+            T::VotingPeriod::get();
+
+		assert_last_event::<T>(Event::PostSubmitted {
+			id: post_id,
+			submitter: bob,
+			bond: balance.saturating_sub(1u32.into()),
+			voting_until,
+		}.into());
 		Ok(())
     }
 
@@ -77,5 +92,5 @@ mod benchmarks {
 
 //     }
 
-//     impl_benchmark_test_suite!(BullPosting, crate::mock::new_test_ext(), crate::mock::Test);
+	impl_benchmark_test_suite!(BullPosting, crate::mock::new_test_ext(), crate::mock::Test);
 }
