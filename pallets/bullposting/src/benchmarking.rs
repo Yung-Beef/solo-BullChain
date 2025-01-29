@@ -8,6 +8,8 @@ use frame_benchmarking::v2::*;
 use frame_system::{RawOrigin};
 use frame_support::traits::{Get, fungible::{Inspect, Mutate}};
 use frame_support::sp_runtime::*;
+use scale_info::prelude::string::String;
+use parity_scale_codec::alloc::string::ToString;
 
 const SEED: u32 = 0;
 const MAX_POSTS: u32 = 2000;
@@ -37,7 +39,7 @@ mod benchmarks {
 	}
 
     #[benchmark]
-    fn submit_post<T: Config>(
+    fn try_submit_post<T: Config>(
 		p: Linear<0, MAX_URL32>,
 		b: Linear<0, u32::MAX>,
 		s: Linear<0, MAX_POSTS>,

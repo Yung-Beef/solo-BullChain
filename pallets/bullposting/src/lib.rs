@@ -37,7 +37,7 @@ pub mod pallet {
     // Other imports
     // TODO: CONSOLIDATE
     use codec::MaxEncodedLen;
-    use scale_info::prelude::{fmt::Debug, vec::Vec};
+    use scale_info::prelude::{fmt::Debug, vec::Vec, string::String};
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
     use frame_support::sp_runtime::traits::{CheckedSub, Zero};
