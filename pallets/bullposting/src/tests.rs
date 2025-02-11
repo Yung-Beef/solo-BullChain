@@ -13,11 +13,10 @@ fn test_try_submit_post() {
         // Existential deposit is 1
         let balance = bond + 1;
         let voting_period = 1000;
-        let post_url: String = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
-        let post_vec: Vec<u8> = String::into_bytes(post_url.clone());
-        let post_id = sp_io::hashing::blake2_256(&post_vec);
-        let empty_post: String = "".into();
-        let strange_post: String = "1234234asd!#%2lvliasdè÷ĳˇԦץڷॷ✗㈧倨".into();
+        let post_url: Vec<u8> = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
+        let post_id = sp_io::hashing::blake2_256(&post_url);
+        let empty_post: Vec<u8> = "".into();
+        let strange_post: Vec<u8> = "1234234asd!#%2lvliasdè÷ĳˇԦץڷॷ✗㈧倨".into();
 
         // Go past genesis block so events get deposited
         System::set_block_number(1);
@@ -77,11 +76,10 @@ fn test_try_submit_vote() {
         let bond = 1000;
         let vote_amount = 500;
         let voting_period = 1000;
-        let post_url: String = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
-        let post_vec: Vec<u8> = String::into_bytes(post_url.clone());
-        let post_id = sp_io::hashing::blake2_256(&post_vec);
-        let empty_vote: String = "".into();
-        let fake_post_url = "get rekt kid".into();
+        let post_url: Vec<u8>  = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
+        let post_id = sp_io::hashing::blake2_256(&post_url);
+        let empty_vote: Vec<u8> = "".into();
+        let fake_post_url: Vec<u8> = "get rekt kid".into();
 
         // Go past genesis block so events get deposited
         System::set_block_number(1);
@@ -146,11 +144,10 @@ fn test_try_update_vote() {
         let vote_amount = 500;
         let new_vote_amount = 505;
         let voting_period = 1000;
-        let post_url: String = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
-        let post_vec: Vec<u8> = String::into_bytes(post_url.clone());
-        let post_id = sp_io::hashing::blake2_256(&post_vec);
-        let empty_vote: String = "".into();
-        let fake_post_url: String = "get rekt kid".into();
+        let post_url: Vec<u8> = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
+        let post_id = sp_io::hashing::blake2_256(&post_url);
+        let empty_vote: Vec<u8> = "".into();
+        let fake_post_url: Vec<u8> = "get rekt kid".into();
 
         // Go past genesis block so events get deposited
         System::set_block_number(1);
@@ -234,14 +231,12 @@ fn test_try_resolve_post() {
         let bond = 500;
         let vote_amount = 500;
         let voting_period = 1000;
-        let post_url: String = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
-        let post_vec: Vec<u8> = String::into_bytes(post_url.clone());
-        let post_id = sp_io::hashing::blake2_256(&post_vec);
-        let post_2_url: String = "testingtestingblahblah".into();
-        let post_2_vec: Vec<u8> = String::into_bytes(post_2_url.clone());
-        let post_2_id = sp_io::hashing::blake2_256(&post_2_vec);
-        let empty_post: String = "".into();
-        let fake_post_url: String = "get rekt kid".into();
+        let post_url: Vec<u8> = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
+        let post_id = sp_io::hashing::blake2_256(&post_url);
+        let post_2_url: Vec<u8> = "testingtestingblahblah".into();
+        let post_2_id = sp_io::hashing::blake2_256(&post_2_url);
+        let empty_post: Vec<u8> = "".into();
+        let fake_post_url: Vec<u8> = "get rekt kid".into();
 
         // Go past genesis block so events get deposited
         System::set_block_number(1);
@@ -330,11 +325,10 @@ fn test_try_unfreeze_vote() {
         let bond = 500;
         let vote_amount = 500;
         let voting_period = 1000;
-        let post_url: String = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
-        let post_vec: Vec<u8> = String::into_bytes(post_url.clone());
-        let post_id = sp_io::hashing::blake2_256(&post_vec);
-        let empty_post: String = "".into();
-        let fake_post_url: String = "get rekt kid".into();
+        let post_url: Vec<u8> = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
+        let post_id = sp_io::hashing::blake2_256(&post_url);
+        let empty_post: Vec<u8> = "".into();
+        let fake_post_url: Vec<u8> = "get rekt kid".into();
 
         // Go past genesis block so events get deposited
         System::set_block_number(1);

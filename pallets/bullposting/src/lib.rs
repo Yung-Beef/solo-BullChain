@@ -37,7 +37,7 @@ pub mod pallet {
     // Other imports
     // TODO: CONSOLIDATE
     use codec::MaxEncodedLen;
-    use scale_info::prelude::{fmt::Debug, vec::Vec, string::String};
+    use scale_info::prelude::{fmt::Debug, vec::Vec};
     use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
     use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
     use frame_support::sp_runtime::traits::{CheckedSub, Zero};
@@ -308,16 +308,14 @@ pub mod pallet {
         #[pallet::weight(Weight::default())]
         pub fn try_submit_post(
             origin: OriginFor<T>,
-            input: String,
+            post_url: Vec<u8>,
             bond: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!input.is_empty(), Error::<T>::Empty);
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
 
             ensure!(bond >= T::BondMinimum::get().into(), Error::<T>::BondTooLow);
-
-            let post_url: Vec<u8> = String::into_bytes(input);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
@@ -344,15 +342,13 @@ pub mod pallet {
         #[pallet::weight(Weight::default())]
         pub fn try_submit_vote(
             origin: OriginFor<T>,
-            input: String,
+            post_url: Vec<u8>,
             vote_amount: BalanceOf<T>,
             direction: Direction,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!input.is_empty(), Error::<T>::Empty);
-
-            let post_url: Vec<u8> = String::into_bytes(input);
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
@@ -379,15 +375,13 @@ pub mod pallet {
         #[pallet::weight(Weight::default())]
         pub fn try_update_vote(
             origin: OriginFor<T>,
-            input: String,
+            post_url: Vec<u8>,
             new_vote: BalanceOf<T>,
             direction: Direction
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!input.is_empty(), Error::<T>::Empty);
-
-            let post_url: Vec<u8> = String::into_bytes(input);
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
@@ -414,13 +408,11 @@ pub mod pallet {
         #[pallet::weight(Weight::default())]
         pub fn try_resolve_post(
             origin: OriginFor<T>,
-            input: String,
+            post_url: Vec<u8>,
         ) -> DispatchResult {
             let _who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!input.is_empty(), Error::<T>::Empty);
-
-            let post_url: Vec<u8> = String::into_bytes(input);
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
@@ -448,13 +440,11 @@ pub mod pallet {
         pub fn try_unfreeze_vote(
             origin: OriginFor<T>,
             account: T::AccountId,
-            input: String,
+            post_url: Vec<u8>,
         ) -> DispatchResult {
             let _who = ensure_signed(origin)?;
             // Ensure the post input is not empty
-            ensure!(!input.is_empty(), Error::<T>::Empty);
-
-            let post_url: Vec<u8> = String::into_bytes(input);
+            ensure!(!post_url.is_empty(), Error::<T>::Empty);
 
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
