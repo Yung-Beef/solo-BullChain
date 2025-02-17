@@ -5,19 +5,17 @@ use super::*;
 #[allow(unused)]
 use crate::Pallet as BullPosting;
 use frame_benchmarking::v2::*;
-use frame_system::{RawOrigin, pallet_prelude::BlockNumberFor};
+use frame_system::RawOrigin;
 use frame_support::traits::{Get, fungible::{Inspect, Mutate}};
 use frame_support::sp_runtime::*;
 use scale_info::prelude::vec;
-use crate::benchmarking::traits::BlockNumber;
+use frame_support::traits::tokens::fungible;
+use crate::benchmarking::traits::Zero;
 
 const SEED: u32 = 0;
 const MAX_POSTS: u32 = 2000;
 const MAX_URL: usize = 2000;
 const MAX_URL32: u32 = 2000;
-const BLOCK_ONE: BlockNumber = 1;
-const VOTING_PERIOD: BlockNumber = 1000;
-const AFTER_VOTING: BlockNumber = 1002;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 	frame_system::Pallet::<T>::assert_last_event(generic_event.into());
@@ -52,8 +50,6 @@ mod benchmarks {
         <T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		frame_system::Pallet::<T>::set_block_number(BLOCK_ONE);
-
 		setup_storage::<T>(MAX_POSTS);
 
 		#[extrinsic_call]
@@ -78,23 +74,22 @@ mod benchmarks {
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		frame_system::Pallet::<T>::set_block_number(BLOCK_ONE);
-
 		setup_storage::<T>(MAX_POSTS);
 
-		try_submit_post(RawOrigin::Signed(alice.clone()), post, balance.saturating_sub(1u32.into()))?;
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), balance.saturating_sub(1u32.into()))?;
 
         #[extrinsic_call]
-		try_submit_vote(RawOrigin::Signed(bob.clone()), post, 5000, Direction::Bullish);
+		try_submit_vote(RawOrigin::Signed(bob.clone()), post, vote_amount, Direction::Bullish);
 
 		assert_last_event::<T>(Event::VoteSubmitted {
 			id: post_id,
 			voter: bob,
-			vote_amount: 5000,
+			vote_amount,
 			direction: Direction::Bullish,
 		}.into());
 		Ok(())
@@ -107,24 +102,25 @@ mod benchmarks {
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
+		let new_vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(6000u32.into());
+
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		frame_system::Pallet::<T>::set_block_number(BLOCK_ONE);
-
 		setup_storage::<T>(MAX_POSTS);
 
-		try_submit_post(RawOrigin::Signed(alice.clone()), post, balance.saturating_sub(1u32.into()))?;
-		try_submit_vote(RawOrigin::Signed(bob.clone()), post, 5000, Direction::Bullish)?;
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), balance.saturating_sub(1u32.into()))?;
+		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
 
         #[extrinsic_call]
-		try_update_vote(RawOrigin::Signed(bob.clone()), post, 6000, Direction::Bearish);
+		try_update_vote(RawOrigin::Signed(bob.clone()), post, new_vote_amount, Direction::Bearish);
 
 		assert_last_event::<T>(Event::VoteUpdated {
 			id: post_id,
 			voter: bob,
-			vote_amount: 6000,
+			vote_amount: new_vote_amount,
 			direction: Direction::Bearish,
 		}.into());
 		Ok(())
@@ -137,24 +133,43 @@ mod benchmarks {
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		frame_system::Pallet::<T>::set_block_number(BLOCK_ONE);
-
 		setup_storage::<T>(MAX_POSTS);
 
-		try_submit_post(RawOrigin::Signed(alice.clone()), post, balance.saturating_sub(1u32.into()))?;
-		try_submit_vote(RawOrigin::Signed(bob.clone()), post, 5000, Direction::Bullish)?;
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), balance.saturating_sub(1u32.into()))?;
+		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
 
-		let new_block_num = frame_system::Pallet::<T>::block_number() +
-		T::VotingPeriod::get() + 1;
+		// let new_block_num = frame_system::Pallet::<T>::block_number() +
+		// T::VotingPeriod::get() + 1;
 
-		frame_system::Pallet::<T>::set_block_number(new_block_num);
+		// frame_system::Pallet::<T>::set_block_number(new_block_num);
 
         #[extrinsic_call]
 		try_resolve_post(RawOrigin::Signed(bob.clone()), post);
+
+		// if T::RewardStyle::get() == false {
+		// 	assert_last_event::<T>(Event::PostResolved {
+		// 		id: post_id,
+		// 		submitter: alice,
+		// 		result: Direction::Bullish,
+		// 		rewarded: T::FlatReward::get(),
+		// 		slashed: Zero::zero(),
+		// 	}.into());
+		// } else {
+		// 	let rewarded = T::RewardCoefficient::get() * balance.saturating_sub(1u32.into());
+			
+		// 	assert_last_event::<T>(Event::PostResolved {
+		// 		id: post_id,
+		// 		submitter: alice,
+		// 		result: Direction::Bullish,
+		// 		rewarded,
+		// 		slashed: Zero::zero(),
+		// 	}.into());
+		// }
 
 		Ok(())
 	}
@@ -166,30 +181,29 @@ mod benchmarks {
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		frame_system::Pallet::<T>::set_block_number(BLOCK_ONE);
-
 		setup_storage::<T>(MAX_POSTS);
 
-		try_submit_post(RawOrigin::Signed(alice.clone()), post, balance.saturating_sub(1u32.into()))?;
-		try_submit_vote(RawOrigin::Signed(bob.clone()), post, 5000, Direction::Bullish)?;
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), balance.saturating_sub(1u32.into()))?;
+		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
 
-		let new_block_num = frame_system::Pallet::<T>::block_number() +
-		T::VotingPeriod::get() + 1;
+		// let new_block_num = frame_system::Pallet::<T>::block_number() +
+		// T::VotingPeriod::get() + 1;
 
-		frame_system::Pallet::<T>::set_block_number(new_block_num);
-		try_resolve_post(RawOrigin::Signed(bob.clone()), post)?;
+		// frame_system::Pallet::<T>::set_block_number(new_block_num);
+		BullPosting::<T>::try_resolve_post(RawOrigin::Signed(bob.clone()).into(), post.clone())?;
 
         #[extrinsic_call]
-		try_unfreeze_vote(RawOrigin::Signed(bob.clone()), bob, post);
+		try_unfreeze_vote(RawOrigin::Signed(bob.clone()), bob.clone(), post);
 
 		assert_last_event::<T>(Event::VoteUnfrozen {
 			id: post_id,
 			account: bob,
-			amount: 5000,
+			amount: vote_amount,
 		}.into());
 		Ok(())
 	}
