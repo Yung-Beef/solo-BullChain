@@ -8,14 +8,11 @@ use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use frame_support::traits::{Get, fungible::{Inspect, Mutate}};
 use frame_support::sp_runtime::*;
-use scale_info::prelude::vec;
-use frame_support::traits::tokens::fungible;
-use crate::benchmarking::traits::Zero;
+use crate::benchmarking::traits::One;
 
 const SEED: u32 = 0;
 const MAX_POSTS: u32 = 2000;
 const MAX_URL: usize = 2000;
-const MAX_URL32: u32 = 2000;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 	frame_system::Pallet::<T>::assert_last_event(generic_event.into());
@@ -33,8 +30,8 @@ mod benchmarks {
 
 		<T as pallet::Config>::NativeBalance::set_balance(&charlie, balance);
 
-		for i in 0..=count {
-			let n = [255; MAX_URL];
+		for _i in 0..=count {
+			let n = [254; MAX_URL];
 			let v: Vec<u8> = Vec::from(n);
 			let _ = BullPosting::<T>::try_submit_post(RawOrigin::Signed(charlie.clone()).into(), v, ed);
 		}
@@ -42,7 +39,7 @@ mod benchmarks {
 
     #[benchmark]
     fn try_submit_post<T: Config>() -> Result<(), BenchmarkError> {
-		let post: Vec<u8> = [254u8; MAX_URL].to_vec();
+		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let caller: T::AccountId = whitelisted_caller();
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
@@ -146,33 +143,17 @@ mod benchmarks {
 		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
 
-		// let new_block_num = frame_system::Pallet::<T>::block_number() +
-		// T::VotingPeriod::get() + 1;
+		let new_block_num = frame_system::Pallet::<T>::block_number() +
+		T::VotingPeriod::get() + One::one();
 
-		// frame_system::Pallet::<T>::set_block_number(new_block_num);
+		frame_system::Pallet::<T>::set_block_number(new_block_num);
 
         #[extrinsic_call]
 		try_resolve_post(RawOrigin::Signed(bob.clone()), post);
 
-		// if T::RewardStyle::get() == false {
-		// 	assert_last_event::<T>(Event::PostResolved {
-		// 		id: post_id,
-		// 		submitter: alice,
-		// 		result: Direction::Bullish,
-		// 		rewarded: T::FlatReward::get(),
-		// 		slashed: Zero::zero(),
-		// 	}.into());
-		// } else {
-		// 	let rewarded = T::RewardCoefficient::get() * balance.saturating_sub(1u32.into());
-			
-		// 	assert_last_event::<T>(Event::PostResolved {
-		// 		id: post_id,
-		// 		submitter: alice,
-		// 		result: Direction::Bullish,
-		// 		rewarded,
-		// 		slashed: Zero::zero(),
-		// 	}.into());
-		// }
+		// assert that the post is resolved
+		let post_struct = Posts::<T>::get(post_id).expect("It's there");
+		assert!(post_struct.resolved);
 
 		Ok(())
 	}
@@ -195,10 +176,10 @@ mod benchmarks {
 		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
 
-		// let new_block_num = frame_system::Pallet::<T>::block_number() +
-		// T::VotingPeriod::get() + 1;
+		let new_block_num = frame_system::Pallet::<T>::block_number() +
+		T::VotingPeriod::get() + One::one();
 
-		// frame_system::Pallet::<T>::set_block_number(new_block_num);
+		frame_system::Pallet::<T>::set_block_number(new_block_num);
 		BullPosting::<T>::try_resolve_post(RawOrigin::Signed(bob.clone()).into(), post.clone())?;
 
         #[extrinsic_call]

@@ -17,7 +17,7 @@
 // --pallet
 // pallet_bullposting
 // --extrinsic
-// try_submit_post
+// *
 // --template
 // ./pallets/benchmarking/frame-weight-template.hbs
 // --output
@@ -34,6 +34,10 @@ use core::marker::PhantomData;
 /// Weight functions needed for `pallet_bullposting`.
 pub trait WeightInfo {
 	fn try_submit_post() -> Weight;
+	fn try_submit_vote() -> Weight;
+	fn try_update_vote() -> Weight;
+	fn try_resolve_post() -> Weight;
+	fn try_unfreeze_vote() -> Weight;
 }
 
 /// Weights for `pallet_bullposting` using the Substrate node and recommended hardware.
@@ -47,10 +51,82 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `139`
 		//  Estimated: `3598`
-		// Minimum execution time: 41_661_000 picoseconds.
-		Weight::from_parts(46_716_000, 3598)
+		// Minimum execution time: 40_098_000 picoseconds.
+		Weight::from_parts(42_093_000, 3598)
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
+	}
+	/// Storage: `Bullposting::Posts` (r:1 w:1)
+	/// Proof: `Bullposting::Posts` (`max_values`: None, `max_size`: Some(133), added: 2608, mode: `MaxEncodedLen`)
+	/// Storage: `Bullposting::Votes` (r:1 w:1)
+	/// Proof: `Bullposting::Votes` (`max_values`: None, `max_size`: Some(113), added: 2588, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Freezes` (r:1 w:1)
+	/// Proof: `Balances::Freezes` (`max_values`: None, `max_size`: Some(67), added: 2542, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Locks` (r:1 w:0)
+	/// Proof: `Balances::Locks` (`max_values`: None, `max_size`: Some(1299), added: 3774, mode: `MaxEncodedLen`)
+	fn try_submit_vote() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `281`
+		//  Estimated: `4764`
+		// Minimum execution time: 36_376_000 picoseconds.
+		Weight::from_parts(38_830_000, 4764)
+			.saturating_add(T::DbWeight::get().reads(5_u64))
+			.saturating_add(T::DbWeight::get().writes(4_u64))
+	}
+	/// Storage: `Bullposting::Posts` (r:1 w:1)
+	/// Proof: `Bullposting::Posts` (`max_values`: None, `max_size`: Some(133), added: 2608, mode: `MaxEncodedLen`)
+	/// Storage: `Bullposting::Votes` (r:1 w:1)
+	/// Proof: `Bullposting::Votes` (`max_values`: None, `max_size`: Some(113), added: 2588, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Freezes` (r:1 w:1)
+	/// Proof: `Balances::Freezes` (`max_values`: None, `max_size`: Some(67), added: 2542, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Locks` (r:1 w:0)
+	/// Proof: `Balances::Locks` (`max_values`: None, `max_size`: Some(1299), added: 3774, mode: `MaxEncodedLen`)
+	fn try_update_vote() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `475`
+		//  Estimated: `4764`
+		// Minimum execution time: 39_687_000 picoseconds.
+		Weight::from_parts(42_957_000, 4764)
+			.saturating_add(T::DbWeight::get().reads(5_u64))
+			.saturating_add(T::DbWeight::get().writes(4_u64))
+	}
+	/// Storage: `Bullposting::Posts` (r:1 w:1)
+	/// Proof: `Bullposting::Posts` (`max_values`: None, `max_size`: Some(133), added: 2608, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(67), added: 2542, mode: `MaxEncodedLen`)
+	fn try_resolve_post() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `411`
+		//  Estimated: `3598`
+		// Minimum execution time: 49_461_000 picoseconds.
+		Weight::from_parts(51_640_000, 3598)
+			.saturating_add(T::DbWeight::get().reads(3_u64))
+			.saturating_add(T::DbWeight::get().writes(3_u64))
+	}
+	/// Storage: `Bullposting::Posts` (r:1 w:0)
+	/// Proof: `Bullposting::Posts` (`max_values`: None, `max_size`: Some(133), added: 2608, mode: `MaxEncodedLen`)
+	/// Storage: `Bullposting::Votes` (r:1 w:1)
+	/// Proof: `Bullposting::Votes` (`max_values`: None, `max_size`: Some(113), added: 2588, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Freezes` (r:1 w:1)
+	/// Proof: `Balances::Freezes` (`max_values`: None, `max_size`: Some(67), added: 2542, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Locks` (r:1 w:0)
+	/// Proof: `Balances::Locks` (`max_values`: None, `max_size`: Some(1299), added: 3774, mode: `MaxEncodedLen`)
+	fn try_unfreeze_vote() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `475`
+		//  Estimated: `4764`
+		// Minimum execution time: 39_507_000 picoseconds.
+		Weight::from_parts(40_906_000, 4764)
+			.saturating_add(T::DbWeight::get().reads(5_u64))
+			.saturating_add(T::DbWeight::get().writes(3_u64))
 	}
 }
 
@@ -64,9 +140,81 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `139`
 		//  Estimated: `3598`
-		// Minimum execution time: 41_661_000 picoseconds.
-		Weight::from_parts(46_716_000, 3598)
+		// Minimum execution time: 40_098_000 picoseconds.
+		Weight::from_parts(42_093_000, 3598)
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
+	}
+	/// Storage: `Bullposting::Posts` (r:1 w:1)
+	/// Proof: `Bullposting::Posts` (`max_values`: None, `max_size`: Some(133), added: 2608, mode: `MaxEncodedLen`)
+	/// Storage: `Bullposting::Votes` (r:1 w:1)
+	/// Proof: `Bullposting::Votes` (`max_values`: None, `max_size`: Some(113), added: 2588, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Freezes` (r:1 w:1)
+	/// Proof: `Balances::Freezes` (`max_values`: None, `max_size`: Some(67), added: 2542, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Locks` (r:1 w:0)
+	/// Proof: `Balances::Locks` (`max_values`: None, `max_size`: Some(1299), added: 3774, mode: `MaxEncodedLen`)
+	fn try_submit_vote() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `281`
+		//  Estimated: `4764`
+		// Minimum execution time: 36_376_000 picoseconds.
+		Weight::from_parts(38_830_000, 4764)
+			.saturating_add(RocksDbWeight::get().reads(5_u64))
+			.saturating_add(RocksDbWeight::get().writes(4_u64))
+	}
+	/// Storage: `Bullposting::Posts` (r:1 w:1)
+	/// Proof: `Bullposting::Posts` (`max_values`: None, `max_size`: Some(133), added: 2608, mode: `MaxEncodedLen`)
+	/// Storage: `Bullposting::Votes` (r:1 w:1)
+	/// Proof: `Bullposting::Votes` (`max_values`: None, `max_size`: Some(113), added: 2588, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Freezes` (r:1 w:1)
+	/// Proof: `Balances::Freezes` (`max_values`: None, `max_size`: Some(67), added: 2542, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Locks` (r:1 w:0)
+	/// Proof: `Balances::Locks` (`max_values`: None, `max_size`: Some(1299), added: 3774, mode: `MaxEncodedLen`)
+	fn try_update_vote() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `475`
+		//  Estimated: `4764`
+		// Minimum execution time: 39_687_000 picoseconds.
+		Weight::from_parts(42_957_000, 4764)
+			.saturating_add(RocksDbWeight::get().reads(5_u64))
+			.saturating_add(RocksDbWeight::get().writes(4_u64))
+	}
+	/// Storage: `Bullposting::Posts` (r:1 w:1)
+	/// Proof: `Bullposting::Posts` (`max_values`: None, `max_size`: Some(133), added: 2608, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(67), added: 2542, mode: `MaxEncodedLen`)
+	fn try_resolve_post() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `411`
+		//  Estimated: `3598`
+		// Minimum execution time: 49_461_000 picoseconds.
+		Weight::from_parts(51_640_000, 3598)
+			.saturating_add(RocksDbWeight::get().reads(3_u64))
+			.saturating_add(RocksDbWeight::get().writes(3_u64))
+	}
+	/// Storage: `Bullposting::Posts` (r:1 w:0)
+	/// Proof: `Bullposting::Posts` (`max_values`: None, `max_size`: Some(133), added: 2608, mode: `MaxEncodedLen`)
+	/// Storage: `Bullposting::Votes` (r:1 w:1)
+	/// Proof: `Bullposting::Votes` (`max_values`: None, `max_size`: Some(113), added: 2588, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Freezes` (r:1 w:1)
+	/// Proof: `Balances::Freezes` (`max_values`: None, `max_size`: Some(67), added: 2542, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Locks` (r:1 w:0)
+	/// Proof: `Balances::Locks` (`max_values`: None, `max_size`: Some(1299), added: 3774, mode: `MaxEncodedLen`)
+	fn try_unfreeze_vote() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `475`
+		//  Estimated: `4764`
+		// Minimum execution time: 39_507_000 picoseconds.
+		Weight::from_parts(40_906_000, 4764)
+			.saturating_add(RocksDbWeight::get().reads(5_u64))
+			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
 }
