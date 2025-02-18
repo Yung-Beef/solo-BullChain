@@ -27,16 +27,16 @@ mod benchmarks {
 
 	fn setup_storage<T: Config>(count: u32) {
 		// submit a post `count` times to fill the storage up
-		let alice: T::AccountId = account("Alice", 0, SEED);
+		let charlie: T::AccountId = account("Charlie", 0, SEED);
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
-		let one = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1u32.into());
+		let ed = <T as pallet::Config>::NativeBalance::minimum_balance();
 
-		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
+		<T as pallet::Config>::NativeBalance::set_balance(&charlie, balance);
 
 		for i in 0..=count {
 			let n = [255; MAX_URL];
 			let v: Vec<u8> = Vec::from(n);
-			let _ = BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), v, one);
+			let _ = BullPosting::<T>::try_submit_post(RawOrigin::Signed(charlie.clone()).into(), v, ed);
 		}
 	}
 
@@ -44,25 +44,23 @@ mod benchmarks {
     fn try_submit_post<T: Config>() -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [254u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
-		let alice: T::AccountId = account("Alice", 0, SEED);
-		let bob: T::AccountId = account("Bob", 0, SEED);
-		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
-		let bond = balance.saturating_sub(1000u32.into());
+		let caller: T::AccountId = whitelisted_caller();
+		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
+		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
 
-        <T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
-		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
+		<T as pallet::Config>::NativeBalance::set_balance(&caller, balance);
 
 		setup_storage::<T>(MAX_POSTS);
 
 		#[extrinsic_call]
-		try_submit_post(RawOrigin::Signed(bob.clone()), post, bond.clone());
+		try_submit_post(RawOrigin::Signed(caller.clone()), post, bond.clone());
 
 		let voting_until = frame_system::Pallet::<T>::block_number() +
             T::VotingPeriod::get();
 
 		assert_last_event::<T>(Event::PostSubmitted {
 			id: post_id,
-			submitter: bob,
+			submitter: caller,
 			bond,
 			voting_until,
 		}.into());
@@ -75,7 +73,8 @@ mod benchmarks {
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
-		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
+		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
 		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
@@ -83,7 +82,7 @@ mod benchmarks {
 
 		setup_storage::<T>(MAX_POSTS);
 
-		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), balance.saturating_sub(1u32.into()))?;
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 
         #[extrinsic_call]
 		try_submit_vote(RawOrigin::Signed(bob.clone()), post, vote_amount, Direction::Bullish);
@@ -103,7 +102,8 @@ mod benchmarks {
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
-		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
+		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
 		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 		let new_vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(6000u32.into());
 
@@ -113,7 +113,7 @@ mod benchmarks {
 
 		setup_storage::<T>(MAX_POSTS);
 
-		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), balance.saturating_sub(1u32.into()))?;
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
 
         #[extrinsic_call]
@@ -134,7 +134,8 @@ mod benchmarks {
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
-		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
+		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
 		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
@@ -142,7 +143,7 @@ mod benchmarks {
 
 		setup_storage::<T>(MAX_POSTS);
 
-		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), balance.saturating_sub(1u32.into()))?;
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
 
 		// let new_block_num = frame_system::Pallet::<T>::block_number() +
@@ -182,7 +183,8 @@ mod benchmarks {
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
-		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
+		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
 		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
@@ -190,7 +192,7 @@ mod benchmarks {
 
 		setup_storage::<T>(MAX_POSTS);
 
-		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), balance.saturating_sub(1u32.into()))?;
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
 
 		// let new_block_num = frame_system::Pallet::<T>::block_number() +
