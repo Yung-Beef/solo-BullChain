@@ -34,18 +34,20 @@ mod benchmarks {
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 
 		for i in 0..=count {
-			let v: Vec<u8> = vec![i.try_into().unwrap()];
+			let n = [255; MAX_URL];
+			let v: Vec<u8> = Vec::from(n);
 			let _ = BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), v, one);
 		}
 	}
 
     #[benchmark]
     fn try_submit_post<T: Config>() -> Result<(), BenchmarkError> {
-		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
+		let post: Vec<u8> = [254u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
 		let bob: T::AccountId = account("Bob", 0, SEED);
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(4294967295u32.into());
+		let bond = balance.saturating_sub(1000u32.into());
 
         <T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
@@ -53,7 +55,7 @@ mod benchmarks {
 		setup_storage::<T>(MAX_POSTS);
 
 		#[extrinsic_call]
-		try_submit_post(RawOrigin::Signed(bob.clone()), post, balance.saturating_sub(1u32.into()));
+		try_submit_post(RawOrigin::Signed(bob.clone()), post, bond.clone());
 
 		let voting_until = frame_system::Pallet::<T>::block_number() +
             T::VotingPeriod::get();
@@ -61,7 +63,7 @@ mod benchmarks {
 		assert_last_event::<T>(Event::PostSubmitted {
 			id: post_id,
 			submitter: bob,
-			bond: balance.saturating_sub(1u32.into()),
+			bond,
 			voting_until,
 		}.into());
 		Ok(())
