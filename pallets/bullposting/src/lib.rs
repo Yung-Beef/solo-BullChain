@@ -305,7 +305,7 @@ pub mod pallet {
         /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
         /// - If the submitter does not have sufficient free tokens to bond ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::default())]
+        #[pallet::weight(T::WeightInfo::try_submit_post(Posts::<T>::storage_info()[0].max_values.unwrap() as u32))]
         pub fn try_submit_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -339,7 +339,8 @@ pub mod pallet {
         /// - If they have already voted once ([`Error::AlreadyVoted`])
         /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::default())]
+        #[pallet::weight(T::WeightInfo::try_submit_vote(Posts::<T>::storage_info()[0].max_values.unwrap() as u32,
+        Votes::<T>::storage_info()[0].max_values.unwrap() as u32))]
         pub fn try_submit_vote(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -372,7 +373,8 @@ pub mod pallet {
         /// - If this particular vote doesn't exist (['Error::VoteDoesNotExist'])
         /// - If the user does not have enough balance for their new vote ([`Error::InsufficientBalance`])
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::default())]
+        #[pallet::weight(T::WeightInfo::try_update_vote(Posts::<T>::storage_info()[0].max_values.unwrap() as u32,
+        Votes::<T>::storage_info()[0].max_values.unwrap() as u32))]
         pub fn try_update_vote(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -405,7 +407,7 @@ pub mod pallet {
         /// - If the vote is still in progress ([`Error::VotingStillOngoing`])
         /// - If the vote has already been resolved ([`Error::PostAlreadyResolved`])
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::default())]
+        #[pallet::weight(T::WeightInfo::try_resolve_post(Posts::<T>::storage_info()[0].max_values.unwrap() as u32))]
         pub fn try_resolve_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -436,7 +438,8 @@ pub mod pallet {
         /// - If the vote is unresolved ([`Error::PostUnresolved`])
         /// - If this particular vote no longer exists (already unfrozen) or never existed (['Error::VoteDoesNotExist'])
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::default())]
+        #[pallet::weight(T::WeightInfo::try_unfreeze_vote(Posts::<T>::storage_info()[0].max_values.unwrap() as u32,
+        Votes::<T>::storage_info()[0].max_values.unwrap() as u32))]
         pub fn try_unfreeze_vote(
             origin: OriginFor<T>,
             account: T::AccountId,

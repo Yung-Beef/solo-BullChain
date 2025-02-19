@@ -11,7 +11,8 @@ use frame_support::sp_runtime::*;
 use crate::benchmarking::traits::One;
 
 const SEED: u32 = 0;
-const MAX_POSTS: u32 = 2000;
+const MAX_POSTS: u32 = 2000000;
+const MAX_VOTES: u32 = 20000000;
 const MAX_URL: usize = 2000;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
@@ -38,7 +39,9 @@ mod benchmarks {
 	}
 
     #[benchmark]
-    fn try_submit_post<T: Config>() -> Result<(), BenchmarkError> {
+    fn try_submit_post<T: Config>(
+		x: Linear<0, MAX_POSTS>
+	) -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let caller: T::AccountId = whitelisted_caller();
@@ -47,7 +50,7 @@ mod benchmarks {
 
 		<T as pallet::Config>::NativeBalance::set_balance(&caller, balance);
 
-		setup_storage::<T>(MAX_POSTS);
+		setup_storage::<T>(x);
 
 		#[extrinsic_call]
 		try_submit_post(RawOrigin::Signed(caller.clone()), post, bond.clone());
@@ -65,7 +68,10 @@ mod benchmarks {
 	}
 
     #[benchmark]
-    fn try_submit_vote<T: Config>() -> Result<(), BenchmarkError> {
+    fn try_submit_vote<T: Config>(
+		x: Linear<0, MAX_POSTS>,
+		y: Linear<0, MAX_VOTES>
+	) -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
@@ -77,7 +83,7 @@ mod benchmarks {
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		setup_storage::<T>(MAX_POSTS);
+		setup_storage::<T>(x);
 
 		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 
@@ -94,7 +100,10 @@ mod benchmarks {
 	}
 
     #[benchmark]
-    fn try_update_vote<T: Config>() -> Result<(), BenchmarkError> {
+    fn try_update_vote<T: Config>(
+		x: Linear<0, MAX_POSTS>,
+		y: Linear<0, MAX_VOTES>
+	) -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
@@ -108,7 +117,7 @@ mod benchmarks {
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		setup_storage::<T>(MAX_POSTS);
+		setup_storage::<T>(x);
 
 		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
@@ -126,7 +135,9 @@ mod benchmarks {
 	}
 
     #[benchmark]
-    fn try_resolve_post<T: Config>() -> Result<(), BenchmarkError> {
+    fn try_resolve_post<T: Config>(
+		x: Linear<0, MAX_POSTS>
+	) -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
@@ -138,7 +149,7 @@ mod benchmarks {
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		setup_storage::<T>(MAX_POSTS);
+		setup_storage::<T>(x);
 
 		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
@@ -159,7 +170,10 @@ mod benchmarks {
 	}
 
     #[benchmark]
-    fn try_unfreeze_vote<T: Config>() -> Result<(), BenchmarkError> {
+    fn try_unfreeze_vote<T: Config>(
+		x: Linear<0, MAX_POSTS>,
+		y: Linear<0, MAX_VOTES>
+	) -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
@@ -171,7 +185,7 @@ mod benchmarks {
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
-		setup_storage::<T>(MAX_POSTS);
+		setup_storage::<T>(x);
 
 		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
