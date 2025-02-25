@@ -35,15 +35,20 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     // Other imports
-    // TODO: CONSOLIDATE
     use codec::MaxEncodedLen;
     use scale_info::prelude::{fmt::Debug, vec::Vec};
-    use frame_support::traits::tokens::{fungible, Preservation, Fortitude, Precision};
-    use frame_support::traits::fungible::{Inspect, Mutate, MutateHold, MutateFreeze};
-    use frame_support::sp_runtime::traits::{CheckedSub, Zero};
-    use frame_support::sp_runtime::{Permill, Percent};
-    use frame_support::BoundedVec;
-
+    use frame_support::{
+        traits::{
+            tokens::{fungible, Preservation, Fortitude, Precision},
+            fungible::{Inspect, Mutate, MutateHold, MutateFreeze},
+        },
+        sp_runtime::{
+            traits::{CheckedSub, Zero},
+            Permill,
+            Percent,
+        },
+        BoundedVec,
+    };
 
     // The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
     // (`Call`s) in this pallet.
@@ -116,7 +121,6 @@ pub mod pallet {
         type BondMinimum: Get<u32>;
 
         /// The allowed length of the "URL" (or other) input into functions.
-        // TODO: SHOULD BE GET<U16> BUT ERRORS, FIGURE OUT WHY
         #[pallet::constant]
         type MaxUrlLength: Get<u32>;
 
