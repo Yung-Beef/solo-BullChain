@@ -147,6 +147,7 @@ pub mod pallet {
         #[default]
         Bullish,
         Bearish,
+        Tie,
     }
 
     /// A reason for the pallet placing a hold on funds.
@@ -265,6 +266,9 @@ pub mod pallet {
             id: [u8; 32],
             account: T::AccountId,
             amount: BalanceOf<T>,
+        },
+        PostResolved {
+            id: [u8; 32]
         }
     }
 
@@ -440,6 +444,7 @@ pub mod pallet {
         /// - If the vote is still in progress ([`Error::VotingStillOngoing`])
         /// - If the vote has already been ended ([`Error::PostAlreadyEnded`])
         #[pallet::call_index(3)]
+        #[pallet::weight(Weight::default())]
         pub fn try_end_voting(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -469,7 +474,7 @@ pub mod pallet {
         /// - If the post is unended ([`Error::PostUnended`])
         /// - TODO: OTHER ERRORS FROM UNFREEZE_VOTE?
         #[pallet::call_index(4)]
-        #[pallet::weight(T::WeightInfo::default())]
+        #[pallet::weight(Weight::default())]
         pub fn try_resolve_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -603,6 +608,9 @@ pub mod pallet {
                         ..post_struct
                     }
                 },
+                Direction::Tie => {
+                    post_struct
+                }
             };
 
             Posts::<T>::insert(&id, updated_post_struct);
@@ -679,6 +687,19 @@ pub mod pallet {
                         }
                     }
                 },
+                Direction::Tie => {
+                    if previous_direction == Direction::Bullish {
+                        Post {
+                            bull_votes: post_struct.bull_votes - previous_amount,
+                            ..post_struct
+                        }
+                    } else {
+                        Post {
+                            bear_votes: post_struct.bear_votes - previous_amount,
+                            ..post_struct
+                        }
+                    }
+                }
             };
 
             Posts::<T>::insert(&id, updated_post_struct);
@@ -729,7 +750,7 @@ pub mod pallet {
                 false => Direction::Bearish,
             };
 
-            // Reward/slash submitter or do nothing if there is a tie
+            // Reward/slash submitter or do nothing if there is a tie/no votes
             if result == Direction::Bullish {
                 // Reward the submitter
                 let rewarded = match T::RewardStyle::get() {
@@ -744,7 +765,7 @@ pub mod pallet {
                     rewarded,
                     slashed: Zero::zero(),
                 });
-            } else {
+            } else if result == Direction::Bearish {
                 // Slashes the submitter
                 let slashed = match T::SlashStyle::get() {
                     false => Self::slash_flat(&submitter)?,
@@ -757,6 +778,15 @@ pub mod pallet {
                     result,
                     rewarded: Zero::zero(),
                     slashed,
+                });
+            } else {
+                // Does nothing if tie/no votes
+                Self::deposit_event(Event::PostEnded { 
+                    id,
+                    submitter,
+                    result: Direction::Tie,
+                    rewarded: Zero::zero(),
+                    slashed: Zero::zero(),
                 });
             }
 
@@ -820,20 +850,22 @@ pub mod pallet {
 
             // Error if the post is not ended yet
             ensure!(post_struct.ended, Error::<T>::PostUnended);
-            
-            // unfreeze all the votes and wipe Voters storage
 
-            // remove from Votes storage as well? should be done inside unfreeze_vote()
+            // Call unfreeze_vote() for each voter and wipe Voters
+            if let Some(voters) = Voters::<T>::get(id) {
+                for voter in voters {
+                    Self::unfreeze_vote(voter, id)?
+                }
+            }
 
-            // unlock storage rent
+            // Unlock the storage rent of the submitter
+            T::NativeBalance::release(&HoldReason::StorageRent.into(), &post_struct.submitter, T::StorageRent::get().into(), Precision::BestEffort)?;
 
 
-            // // Emit an event
-            // Self::deposit_event(Event::VoteUnfrozen {
-            //     id,
-            //     account: who,
-            //     amount,
-            // });
+            // Emit an event
+            Self::deposit_event(Event::PostResolved {
+                id,
+            });
             
 
             Ok(())
@@ -841,29 +873,25 @@ pub mod pallet {
 
         pub(crate) fn unfreeze_vote(
             who: T::AccountId,
-            post_url: BoundedVec<u8, T::MaxUrlLength>
+            id: [u8; 32]
         ) -> DispatchResult {
-            let id = sp_io::hashing::blake2_256(&post_url);
-
-            // Error if the post does not exist.
-            ensure!(Posts::<T>::contains_key(&id), Error::<T>::PostDoesNotExist);
-            let post_struct = Posts::<T>::get(&id).expect("Already checked that it exists");
-
-            // Error if the post is not ended yet
-            ensure!(post_struct.ended, Error::<T>::PostUnended);
-
             // Error if this particular vote no longer exists or never existed.
             ensure!(Votes::<T>::contains_key(&who, &id), Error::<T>::VoteDoesNotExist);
 
             // Remove from Votes and get vote amount
             let (amount, _direction) = Votes::<T>::take(&who, id);
-            
+
             // Remove freeze
             <<T as Config>::NativeBalance>::decrease_frozen(&FreezeReason::Vote.into(), &who, amount.clone())?;
 
-            // Remove from Voters
-            let voters = Voters::<T>::take(id).expect("We know it exists");
-
+            // Decrease vote count or remove if 0
+            if let Some(count) = VoteCounts::<T>::get(id) {
+                if count > 1 {
+                    VoteCounts::<T>::insert(id, count - 1)
+                } else {
+                    VoteCounts::<T>::remove(id)
+                }
+            };
 
             // Emit an event
             Self::deposit_event(Event::VoteUnfrozen {
@@ -871,7 +899,6 @@ pub mod pallet {
                 account: who,
                 amount,
             });
-            
 
             Ok(())
         }
