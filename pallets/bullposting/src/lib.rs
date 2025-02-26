@@ -336,8 +336,9 @@ pub mod pallet {
         ///
         /// The function will return an error under the following conditions:
         ///
-        /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
         /// - If they submit nothing for the post_url ([`Error::Empty`])
+        /// - If the bondy is below the `BondMinimum` ([`Error::BondTooLow`])
+        /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
         /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
         /// - If the submitter does not have sufficient free tokens for their bond and the storage rent ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(0)]
@@ -367,11 +368,11 @@ pub mod pallet {
         /// The function will return an error under the following conditions:
         ///
         /// - If they submit nothing for the post_url ([`Error::Empty`])
+        /// - If the vote is below the VoteMinimum ([`Error::VoteTooLow`])
         /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the vote is below the VoteMinimum ([`Error::VoteTooLow`])
-        /// - If the post has already reached `MaxVoters` ([`Error::VotersMaxed`])
         /// - If the voting has already ended ([`Error::VotingEnded`])
+        /// - If the post has already reached `MaxVoters` ([`Error::VotersMaxed`])
         /// - If they have already voted once ([`Error::AlreadyVoted`])
         /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(1)]
@@ -403,9 +404,9 @@ pub mod pallet {
         /// The function will return an error under the following conditions:
         ///
         /// - If they submit nothing for the post_url ([`Error::Empty`])
+        /// - If the vote is below the VoteMinimum ([`Error::VoteTooLow`])
         /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
-        /// - If the vote is below the VoteMinimum ([`Error::VoteTooLow`])
         /// - If the voting has already ended ([`Error::VotingEnded`])
         /// - If this particular vote doesn't exist (['Error::VoteDoesNotExist'])
         /// - If the user does not have enough balance for their new vote ([`Error::InsufficientBalance`])
@@ -461,7 +462,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Unlocks the submitter's storage rent and unfreezes all votes.
+        /// Unlocks the submitter's storage rent and unfreezes all votes on that post.
         /// Callable by anyone.
         ///
         /// ## Errors
@@ -472,7 +473,6 @@ pub mod pallet {
         /// - If post input is higher than the `MaxUrlLength` set in the runtime ([`Error::InputTooLong`])
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the post is unended ([`Error::PostUnended`])
-        /// - TODO: OTHER ERRORS FROM UNFREEZE_VOTE?
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::default())]
         pub fn try_resolve_post(
@@ -486,7 +486,6 @@ pub mod pallet {
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
 
-            // TODO
             Self::resolve_post(bounded)?;
 
             Ok(())
@@ -559,7 +558,9 @@ pub mod pallet {
             ensure!(frame_system::Pallet::<T>::block_number() < post_struct.voting_until, Error::<T>::VotingEnded);
 
             // Ensure MaxVoters has not been reached
-            ensure!(VoteCounts::<T>::get(id) != Some(T::MaxVoters::get()), Error::<T>::VotersMaxed);
+            if let Some(voters) = VoteCounts::<T>::get(id) {
+                ensure!(voters != T::MaxVoters::get(), Error::<T>::VotersMaxed)
+            }
 
             // Check if they have already voted
             ensure!(!Votes::<T>::contains_key(&who, &id), Error::<T>::AlreadyVoted);
@@ -578,11 +579,11 @@ pub mod pallet {
             match Voters::<T>::get(id) {
                 None => {
                     let mut v: BoundedVec<T::AccountId, T::MaxVoters> = BoundedVec::new();
-                    // Will never error as we already checked regarding the number of voters (vector length)
                     let _ = v.try_push(who.clone());
                     Voters::<T>::insert(&id, v)
                 },
                 Some(mut v) => {
+                    // Will never error as we already checked regarding the number of voters (vector length) to ensure space
                     let _ = v.try_push(who.clone());
                     Voters::<T>::insert(&id, v)
                 },
@@ -590,7 +591,7 @@ pub mod pallet {
 
             // Update the number of voters for this post
             match VoteCounts::<T>::get(id) {
-                None => { VoteCounts::<T>::insert(id, 0) },
+                None => { VoteCounts::<T>::insert(id, 1) },
                 Some(x) => { VoteCounts::<T>::insert(id, x + 1) },
             }
 
@@ -729,7 +730,7 @@ pub mod pallet {
             // If current block number is lower than the post's voting_until, voting has not ended; error.
             ensure!(frame_system::Pallet::<T>::block_number() >= post_struct.voting_until, Error::<T>::VotingStillOngoing);
 
-            // Error if already ended.
+            // Error if the post has already been ended.
             ensure!(!post_struct.ended, Error::<T>::PostAlreadyEnded);
 
             // End the post and update storage
@@ -745,9 +746,12 @@ pub mod pallet {
             // Unlock submitter's bond
             T::NativeBalance::release(&HoldReason::PostBond.into(), &submitter, bond, Precision::BestEffort)?;
 
-            let result: Direction = match updated_post_struct.bull_votes > updated_post_struct.bear_votes {
-                true => Direction::Bullish,
-                false => Direction::Bearish,
+            let result: Direction = if updated_post_struct.bull_votes > updated_post_struct.bear_votes {
+                Direction::Bullish
+            } else if updated_post_struct.bull_votes < updated_post_struct.bear_votes {
+                Direction::Bearish
+            } else {
+                Direction::Tie
             };
 
             // Reward/slash submitter or do nothing if there is a tie/no votes
@@ -852,7 +856,7 @@ pub mod pallet {
             ensure!(post_struct.ended, Error::<T>::PostUnended);
 
             // Call unfreeze_vote() for each voter and wipe Voters
-            if let Some(voters) = Voters::<T>::get(id) {
+            if let Some(voters) = Voters::<T>::take(id) {
                 for voter in voters {
                     Self::unfreeze_vote(voter, id)?
                 }
@@ -861,6 +865,8 @@ pub mod pallet {
             // Unlock the storage rent of the submitter
             T::NativeBalance::release(&HoldReason::StorageRent.into(), &post_struct.submitter, T::StorageRent::get().into(), Precision::BestEffort)?;
 
+            // Remove from Posts storage
+            let _ = Posts::<T>::take(id);
 
             // Emit an event
             Self::deposit_event(Event::PostResolved {
@@ -875,9 +881,6 @@ pub mod pallet {
             who: T::AccountId,
             id: [u8; 32]
         ) -> DispatchResult {
-            // Error if this particular vote no longer exists or never existed.
-            ensure!(Votes::<T>::contains_key(&who, &id), Error::<T>::VoteDoesNotExist);
-
             // Remove from Votes and get vote amount
             let (amount, _direction) = Votes::<T>::take(&who, id);
 

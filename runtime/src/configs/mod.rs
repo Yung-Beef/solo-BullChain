@@ -59,15 +59,18 @@ parameter_types! {
 	pub RuntimeBlockLength: BlockLength = BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
 	pub const SS58Prefix: u8 = 42;
 
-	pub const VotingPeriod: BlockNumber = 1000;
-    pub const BondMinimum: u32 = 50;
-    pub const MaxUrlLength: u32 = u32::MAX;
     pub const RewardStyle: bool = true; // false = FlatReward, true = RewardCoefficient
     pub const FlatReward: u32 = 500;
     pub const RewardCoefficient: u32 = 100;
     pub const SlashStyle: bool = true; // false = FlatSlash, true = SlashCoefficient
     pub const FlatSlash: u32 = 500;
     pub const SlashCoefficient: u8 = 100;
+	pub const VotingPeriod: BlockNumber = 100;
+    pub const BondMinimum: u32 = 500;
+	pub const VoteMinimum: u32 = 500;
+    pub const MaxVoters: u32 = 10000;
+    pub const StorageRent: u32 = 1000;
+    pub const MaxUrlLength: u32 = 2000;
 }
 
 /// The default types are being injected by [`derive_impl`](`frame_support::derive_impl`) from
@@ -182,4 +185,7 @@ impl pallet_bullposting::Config for Runtime {
     type VotingPeriod = VotingPeriod;
     type MaxUrlLength = MaxUrlLength;
     type BondMinimum = BondMinimum;
+	type VoteMinimum = VoteMinimum;
+	type MaxVoters = MaxVoters;
+	type StorageRent = StorageRent;
 }

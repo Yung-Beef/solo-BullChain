@@ -13,6 +13,7 @@ use crate::benchmarking::traits::One;
 const SEED: u32 = 0;
 // TODO: Should be gettable from the mock somehow but I don't know how, so hardcording for now
 const MAX_URL: usize = 2000;
+const MAX_VOTERS: u32 = 10000;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 	frame_system::Pallet::<T>::assert_last_event(generic_event.into());
@@ -105,7 +106,7 @@ mod benchmarks {
 	}
 
     #[benchmark]
-    fn try_resolve_post<T: Config>() -> Result<(), BenchmarkError> {
+    fn try_end_voting<T: Config>() -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
@@ -118,7 +119,12 @@ mod benchmarks {
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
 		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
-		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
+
+		for i in 0..MAX_VOTERS {
+			let acc: T::AccountId = account("filler", i, SEED);
+			<T as pallet::Config>::NativeBalance::set_balance(&acc, balance);
+			BullPosting::<T>::try_submit_vote(RawOrigin::Signed(acc).into(), post.clone(), vote_amount, Direction::Bullish)?;
+		}
 
 		let new_block_num = frame_system::Pallet::<T>::block_number() +
 		T::VotingPeriod::get() + One::one();
@@ -129,42 +135,8 @@ mod benchmarks {
 		try_resolve_post(RawOrigin::Signed(bob.clone()), post);
 
 		// assert that the post is resolved
-		let post_struct = Posts::<T>::get(post_id).expect("It's there");
-		assert!(post_struct.resolved);
+		assert!(!Posts::<T>::contains_key(post_id));
 
-		Ok(())
-	}
-
-    #[benchmark]
-    fn try_unfreeze_vote<T: Config>() -> Result<(), BenchmarkError> {
-		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
-		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
-		let alice: T::AccountId = account("Alice", 0, SEED);
-		let bob: T::AccountId = account("Bob", 0, SEED);
-		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
-		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
-		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
-
-		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
-		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
-
-		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
-		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
-
-		let new_block_num = frame_system::Pallet::<T>::block_number() +
-		T::VotingPeriod::get() + One::one();
-
-		frame_system::Pallet::<T>::set_block_number(new_block_num);
-		BullPosting::<T>::try_resolve_post(RawOrigin::Signed(bob.clone()).into(), post.clone())?;
-
-        #[extrinsic_call]
-		try_unfreeze_vote(RawOrigin::Signed(bob.clone()), bob.clone(), post);
-
-		assert_last_event::<T>(Event::VoteUnfrozen {
-			id: post_id,
-			account: bob,
-			amount: vote_amount,
-		}.into());
 		Ok(())
 	}
 

@@ -38,9 +38,6 @@ impl pallet_balances::Config for Test {
 type BlockNumber = u64;
 
 parameter_types! {
-    pub const VotingPeriod: BlockNumber = 1000;
-    pub const BondMinimum: u32 = 50;
-    pub const MaxUrlLength: u32 = u32::MAX;
     // false = FlatReward, true = RewardCoefficient
     pub const RewardStyle: bool = true;
     pub const FlatReward: u32 = 500;
@@ -49,6 +46,12 @@ parameter_types! {
     pub const SlashStyle: bool = true;
     pub const FlatSlash: u32 = 500;
     pub const SlashCoefficient: u8 = 100;
+    pub const VotingPeriod: BlockNumber = 1000;
+    pub const BondMinimum: u32 = 50;
+    pub const VoteMinimum: u32 = 50;
+    pub const MaxVoters: u32 = 3;
+    pub const StorageRent: u32 = 100;
+    pub const MaxUrlLength: u32 = 2000;
 }
 
 impl pallet_bullposting::Config for Test {
@@ -65,8 +68,11 @@ impl pallet_bullposting::Config for Test {
     type FlatSlash = FlatSlash;
     type SlashCoefficient = SlashCoefficient;
     type VotingPeriod = VotingPeriod;
-    type MaxUrlLength = MaxUrlLength;
     type BondMinimum = BondMinimum;
+    type VoteMinimum = VoteMinimum;
+    type MaxVoters = MaxVoters;
+    type StorageRent = StorageRent;
+    type MaxUrlLength = MaxUrlLength;
 }
 
 // Build genesis storage according to the mock runtime.
