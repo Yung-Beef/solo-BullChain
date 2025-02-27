@@ -52,6 +52,7 @@ parameter_types! {
     pub const MaxVoters: u32 = 3;
     pub const StorageRent: u32 = 100;
     pub const MaxUrlLength: u32 = 2000;
+    pub const UnfreezeLimit: u32 = 1000;
 }
 
 impl pallet_bullposting::Config for Test {
@@ -73,6 +74,7 @@ impl pallet_bullposting::Config for Test {
     type MaxVoters = MaxVoters;
     type StorageRent = StorageRent;
     type MaxUrlLength = MaxUrlLength;
+    type UnfreezeLimit = UnfreezeLimit;
 }
 
 // Build genesis storage according to the mock runtime.

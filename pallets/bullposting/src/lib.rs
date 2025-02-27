@@ -136,6 +136,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxUrlLength: Get<u32>;
 
+        /// The maximum amount of unfreezes that can be done per `try_resolve_post`.
+        #[pallet::constant]
+        type UnfreezeLimit: Get<u32>;
+
     }
 
     pub type BalanceOf<T> =
@@ -267,6 +271,9 @@ pub mod pallet {
             account: T::AccountId,
             amount: BalanceOf<T>,
         },
+        PartiallyResolved {
+            id: [u8; 32]
+        },
         PostResolved {
             id: [u8; 32]
         }
@@ -324,7 +331,7 @@ pub mod pallet {
     /// will also change which will break backwards compatibility.
     ///
     /// The [`weight`] macro is used to assign a weight to each call.
-    #[pallet::call(weight(<T as Config>::WeightInfo))]
+    #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Submits a post to the chain for voting.
         /// If the post is ultimately voted as bullish, they will receive a reward.
@@ -342,6 +349,7 @@ pub mod pallet {
         /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
         /// - If the submitter does not have sufficient free tokens for their bond and the storage rent ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(0)]
+        #[pallet::weight(Weight::default())]
         pub fn try_submit_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -376,6 +384,7 @@ pub mod pallet {
         /// - If they have already voted once ([`Error::AlreadyVoted`])
         /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(1)]
+        #[pallet::weight(Weight::default())]
         pub fn try_submit_vote(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -411,6 +420,7 @@ pub mod pallet {
         /// - If this particular vote doesn't exist (['Error::VoteDoesNotExist'])
         /// - If the user does not have enough balance for their new vote ([`Error::InsufficientBalance`])
         #[pallet::call_index(2)]
+        #[pallet::weight(Weight::default())]
         pub fn try_update_vote(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -446,7 +456,7 @@ pub mod pallet {
         /// - If the vote has already been ended ([`Error::PostAlreadyEnded`])
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::default())]
-        pub fn try_end_voting(
+        pub fn try_end_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
         ) -> DispatchResult {
@@ -457,7 +467,7 @@ pub mod pallet {
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
 
-            Self::end_voting(bounded)?;
+            Self::end_post(bounded)?;
 
             Ok(())
         }
@@ -478,7 +488,7 @@ pub mod pallet {
         pub fn try_resolve_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
-        ) -> DispatchResult {
+        ) -> DispatchResultWithPostInfo {
             let _who = ensure_signed(origin)?;
             // Ensure the post input is not empty
             ensure!(!post_url.is_empty(), Error::<T>::Empty);
@@ -486,9 +496,9 @@ pub mod pallet {
             // Convert the post input into a bounded vec to use in the actual logic, errors if too long
             let bounded: BoundedVec<u8, T::MaxUrlLength> = BoundedVec::try_from(post_url).map_err(|_| Error::<T>::InputTooLong)?;
 
-            Self::resolve_post(bounded)?;
+            let weight_used = Self::resolve_post(bounded)?;
 
-            Ok(())
+            Ok(weight_used)
         }
     }
 
@@ -716,7 +726,7 @@ pub mod pallet {
             Ok(())
         }
 
-        pub(crate) fn end_voting(
+        pub(crate) fn end_post(
             post_url: BoundedVec<u8, T::MaxUrlLength>
         ) -> DispatchResult {
             let id = sp_io::hashing::blake2_256(&post_url);
@@ -845,7 +855,7 @@ pub mod pallet {
 
         pub(crate) fn resolve_post(
             post_url: BoundedVec<u8, T::MaxUrlLength>
-        ) -> DispatchResult {
+        ) -> DispatchResultWithPostInfo {
             let id = sp_io::hashing::blake2_256(&post_url);
 
             // Error if the post does not exist.
@@ -855,26 +865,46 @@ pub mod pallet {
             // Error if the post is not ended yet
             ensure!(post_struct.ended, Error::<T>::PostUnended);
 
-            // Call unfreeze_vote() for each voter and wipe Voters
-            if let Some(voters) = Voters::<T>::take(id) {
-                for voter in voters {
-                    Self::unfreeze_vote(voter, id)?
+            let mut unfreeze_count = 0u32;
+
+            // Assume all will be unfrozen
+            let mut all_unfrozen = true;
+
+            // Call unfreeze_vote() for each voter and remove from `Voters` up to `UnfreezeLimit` or until all voters are removed
+            if let Some(mut voters) = Voters::<T>::take(id) {
+                while !(unfreeze_count >= T::UnfreezeLimit::get()) {
+                    match voters.pop() {
+                        Some(voter) => {
+                            Self::unfreeze_vote(voter, id)?;
+                            unfreeze_count += 1;
+                        },
+                        None => break
+                    }
+                }
+                if unfreeze_count >= T::UnfreezeLimit::get() {
+                    all_unfrozen = false;
+                    Voters::<T>::insert(id, voters);
                 }
             }
 
-            // Unlock the storage rent of the submitter
-            T::NativeBalance::release(&HoldReason::StorageRent.into(), &post_struct.submitter, T::StorageRent::get().into(), Precision::BestEffort)?;
+            if all_unfrozen {
+                // Unlock the storage rent of the submitter
+                T::NativeBalance::release(&HoldReason::StorageRent.into(), &post_struct.submitter, T::StorageRent::get().into(), Precision::BestEffort)?;
 
-            // Remove from Posts storage
-            let _ = Posts::<T>::take(id);
+                // Remove from Posts storage
+                let _ = Posts::<T>::take(id);
 
-            // Emit an event
-            Self::deposit_event(Event::PostResolved {
-                id,
-            });
-            
-
-            Ok(())
+                // Emit an event
+                Self::deposit_event(Event::PostResolved {
+                    id,
+                });
+                Ok(Some(Weight::default()).into())
+            } else {
+                Self::deposit_event(Event::PartiallyResolved {
+                    id,
+                });
+                Ok(().into())
+            }
         }
 
         pub(crate) fn unfreeze_vote(

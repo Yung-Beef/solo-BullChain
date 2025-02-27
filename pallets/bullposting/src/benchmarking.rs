@@ -8,7 +8,7 @@ use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use frame_support::traits::{Get, fungible::{Inspect, Mutate}};
 use frame_support::sp_runtime::*;
-use crate::benchmarking::traits::One;
+use crate::benchmarking::traits::{Zero, One};
 
 const SEED: u32 = 0;
 // TODO: Should be gettable from the mock somehow but I don't know how, so hardcording for now
@@ -106,7 +106,44 @@ mod benchmarks {
 	}
 
     #[benchmark]
-    fn try_end_voting<T: Config>() -> Result<(), BenchmarkError> {
+    fn try_end_post<T: Config>() -> Result<(), BenchmarkError> {
+		let post: Vec<u8> = [250u8; MAX_URL].to_vec();
+		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
+		let alice: T::AccountId = account("Alice", 0, SEED);
+		let bob: T::AccountId = account("Bob", 0, SEED);
+		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
+		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
+		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
+
+		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
+		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
+
+		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
+		BullPosting::<T>::try_submit_vote(RawOrigin::Signed(bob.clone()).into(), post.clone(), vote_amount, Direction::Bullish)?;
+
+		let new_block_num = frame_system::Pallet::<T>::block_number() +
+		T::VotingPeriod::get() + One::one();
+
+		frame_system::Pallet::<T>::set_block_number(new_block_num);
+
+        #[extrinsic_call]
+		try_end_post(RawOrigin::Signed(bob.clone()), post);
+		
+		assert_last_event::<T>(Event::PostEnded {
+			id: post_id,
+			submitter: alice,
+			result: Direction::Bullish,
+			rewarded: vote_amount,
+			slashed: Zero::zero(),
+		}.into());
+
+		Ok(())
+	}
+
+	#[benchmark]
+    fn try_resolve_post<T: Config>(
+		x: Linear<1, MAX_VOTERS>
+	) -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
 		let post_id: [u8; 32] = sp_io::hashing::blake2_256(&post);
 		let alice: T::AccountId = account("Alice", 0, SEED);
@@ -120,7 +157,8 @@ mod benchmarks {
 
 		BullPosting::<T>::try_submit_post(RawOrigin::Signed(alice.clone()).into(), post.clone(), bond)?;
 
-		for i in 0..MAX_VOTERS {
+		// Add a bunch of votes
+		for i in 0..x {
 			let acc: T::AccountId = account("filler", i, SEED);
 			<T as pallet::Config>::NativeBalance::set_balance(&acc, balance);
 			BullPosting::<T>::try_submit_vote(RawOrigin::Signed(acc).into(), post.clone(), vote_amount, Direction::Bullish)?;
@@ -131,12 +169,19 @@ mod benchmarks {
 
 		frame_system::Pallet::<T>::set_block_number(new_block_num);
 
+		BullPosting::<T>::try_end_post(RawOrigin::Signed(bob.clone()).into(), post.clone())?;
+
         #[extrinsic_call]
 		try_resolve_post(RawOrigin::Signed(bob.clone()), post);
 
-		// assert that the post is resolved
-		assert!(!Posts::<T>::contains_key(post_id));
-
+		// assert that the post is partially or fully resolved
+		if x >= 1000 {
+			assert_last_event::<T>(Event::PartiallyResolved {
+				id: post_id
+			}.into())
+		} else {
+			assert!(!Posts::<T>::contains_key(post_id));
+		}
 		Ok(())
 	}
 

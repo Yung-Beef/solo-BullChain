@@ -71,6 +71,7 @@ parameter_types! {
     pub const MaxVoters: u32 = 10000;
     pub const StorageRent: u32 = 1000;
     pub const MaxUrlLength: u32 = 2000;
+	pub const UnfreezeLimit: u32 = 1000;
 }
 
 /// The default types are being injected by [`derive_impl`](`frame_support::derive_impl`) from
@@ -188,4 +189,5 @@ impl pallet_bullposting::Config for Runtime {
 	type VoteMinimum = VoteMinimum;
 	type MaxVoters = MaxVoters;
 	type StorageRent = StorageRent;
+	type UnfreezeLimit = UnfreezeLimit;
 }
