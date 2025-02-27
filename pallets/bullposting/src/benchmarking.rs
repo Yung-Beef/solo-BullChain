@@ -11,7 +11,6 @@ use frame_support::sp_runtime::*;
 use crate::benchmarking::traits::{Zero, One};
 
 const SEED: u32 = 0;
-// TODO: Should be gettable from the mock somehow but I don't know how, so hardcording for now
 const MAX_URL: usize = 2000;
 const MAX_VOTERS: u32 = 10000;
 
@@ -30,6 +29,8 @@ mod benchmarks {
 		let caller: T::AccountId = whitelisted_caller();
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
 		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
+
+		frame_system::Pallet::<T>::set_block_number(One::one());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&caller, balance);
 
@@ -57,6 +58,8 @@ mod benchmarks {
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
 		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
 		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
+
+		frame_system::Pallet::<T>::set_block_number(One::one());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
@@ -86,6 +89,7 @@ mod benchmarks {
 		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 		let new_vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(6000u32.into());
 
+		frame_system::Pallet::<T>::set_block_number(One::one());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
@@ -115,6 +119,8 @@ mod benchmarks {
 		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
 		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
 
+		frame_system::Pallet::<T>::set_block_number(One::one());
+
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);
 
@@ -133,7 +139,7 @@ mod benchmarks {
 			id: post_id,
 			submitter: alice,
 			result: Direction::Bullish,
-			rewarded: vote_amount,
+			rewarded: bond,
 			slashed: Zero::zero(),
 		}.into());
 
@@ -151,6 +157,8 @@ mod benchmarks {
 		let balance = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(u32::MAX.into());
 		let bond = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(1000u32.into());
 		let vote_amount = <T as pallet::Config>::NativeBalance::minimum_balance().saturating_add(5000u32.into());
+
+		frame_system::Pallet::<T>::set_block_number(One::one());
 
 		<T as pallet::Config>::NativeBalance::set_balance(&alice, balance);
 		<T as pallet::Config>::NativeBalance::set_balance(&bob, balance);

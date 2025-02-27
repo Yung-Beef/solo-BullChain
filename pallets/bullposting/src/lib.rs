@@ -255,7 +255,7 @@ pub mod pallet {
             /// Bullish or bearish vote.
             direction: Direction,
         },
-        /// Vote closed and ended, unlocking voted tokens and rewarding or slashing the submitter.
+        /// Vote closed and ended, rewarding or slashing the submitter.
         PostEnded {
             /// The post ID.
             id: [u8; 32],
@@ -331,7 +331,7 @@ pub mod pallet {
     /// will also change which will break backwards compatibility.
     ///
     /// The [`weight`] macro is used to assign a weight to each call.
-    #[pallet::call]
+    #[pallet::call(weight(<T as Config>::WeightInfo))]
     impl<T: Config> Pallet<T> {
         /// Submits a post to the chain for voting.
         /// If the post is ultimately voted as bullish, they will receive a reward.
@@ -349,7 +349,6 @@ pub mod pallet {
         /// - If the post has been submitted previously ([`Error::PostAlreadyExists`])
         /// - If the submitter does not have sufficient free tokens for their bond and the storage rent ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::default())]
         pub fn try_submit_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -384,7 +383,6 @@ pub mod pallet {
         /// - If they have already voted once ([`Error::AlreadyVoted`])
         /// - If the user tries to vote with more than their balance ([`Error::InsufficientFreeBalance`])
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::default())]
         pub fn try_submit_vote(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -420,7 +418,6 @@ pub mod pallet {
         /// - If this particular vote doesn't exist (['Error::VoteDoesNotExist'])
         /// - If the user does not have enough balance for their new vote ([`Error::InsufficientBalance`])
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::default())]
         pub fn try_update_vote(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -455,7 +452,6 @@ pub mod pallet {
         /// - If the vote is still in progress ([`Error::VotingStillOngoing`])
         /// - If the vote has already been ended ([`Error::PostAlreadyEnded`])
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::default())]
         pub fn try_end_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -484,7 +480,7 @@ pub mod pallet {
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the post is unended ([`Error::PostUnended`])
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::default())]
+        #[pallet::weight(T::WeightInfo::try_resolve_post(T::UnfreezeLimit::get()))]
         pub fn try_resolve_post(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
@@ -579,7 +575,6 @@ pub mod pallet {
             ensure!(vote_amount < <<T as Config>::NativeBalance>::total_balance(&who), Error::<T>::InsufficientFreeBalance);
 
             // Extend_freeze
-            // TODO: FIGURE OUT HOW TO USE THE POST HASH AS THE FREEZE REASON
             <<T as Config>::NativeBalance>::extend_freeze(&FreezeReason::Vote.into(), &who, vote_amount)?;
 
             // Store vote for account and post
@@ -898,7 +893,7 @@ pub mod pallet {
                 Self::deposit_event(Event::PostResolved {
                     id,
                 });
-                Ok(Some(Weight::default()).into())
+                Ok(Some(T::WeightInfo::try_resolve_post(unfreeze_count)).into())
             } else {
                 Self::deposit_event(Event::PartiallyResolved {
                     id,

@@ -49,7 +49,7 @@ parameter_types! {
     pub const VotingPeriod: BlockNumber = 1000;
     pub const BondMinimum: u32 = 50;
     pub const VoteMinimum: u32 = 50;
-    pub const MaxVoters: u32 = 3;
+    pub const MaxVoters: u32 = 2000;
     pub const StorageRent: u32 = 100;
     pub const MaxUrlLength: u32 = 2000;
     pub const UnfreezeLimit: u32 = 1000;
@@ -81,7 +81,7 @@ impl pallet_bullposting::Config for Test {
 pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
     let genesis = pallet_balances::GenesisConfig::<Test> { 
-        balances: vec![(0, 1001), (1, 1001), (2, 1001), (3, 1001)]
+        balances: vec![(0, 1001), (1, 1001), (2, 1001), (3, 1001), (10000, 1001)]
     };
     genesis.assimilate_storage(&mut t).unwrap();
     t.into()

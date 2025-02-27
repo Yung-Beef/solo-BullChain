@@ -1,6 +1,6 @@
 use crate::{mock::*, Error, Event};
 use frame_support::{assert_noop, assert_ok};
-use frame_support::traits::fungible::Inspect;
+use frame_support::traits::fungible::{Inspect, Mutate};
 use frame_support::traits::tokens::{Preservation, Fortitude};
 
 
@@ -77,7 +77,7 @@ fn test_try_submit_vote() {
         let alice = 0;
         let bob = 1;
         let charlie = 2;
-        let david = 3;
+        let david = 10000;
         let bond = 300;
         let vote_amount = 500;
         let voting_period = 1000;
@@ -142,6 +142,12 @@ fn test_try_submit_vote() {
 
         // Alice votes Bullish
         assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(alice), post_url.clone(), vote_amount, crate::Direction::Bullish));
+
+        // Vote on post (starts at 2 because alice and bob are 0 and 1)
+        for i in 2..2000u64 {
+            Balances::set_balance(&i, vote_amount + 50);
+            let _ = Bullposting::try_submit_vote(RuntimeOrigin::signed(i), post_url.clone(), vote_amount, crate::Direction::Bullish);
+        }
 
         // Can't vote if the maximum number of voters have already voted on this post
         assert_noop!(Bullposting::try_submit_vote(RuntimeOrigin::signed(david), post_url.clone(), vote_amount, crate::Direction::Bearish), Error::<Test>::VotersMaxed);
@@ -248,7 +254,7 @@ fn test_try_update_vote() {
 }
 
 #[test]
-fn test_try_end_voting() {
+fn test_try_end_post() {
     new_test_ext().execute_with(|| {
         let alice = 0;
         let bob = 1;
@@ -277,22 +283,22 @@ fn test_try_end_voting() {
 
 
         // Cannot end during the voting period
-        assert_noop!(Bullposting::try_end_voting(RuntimeOrigin::signed(alice), post_url.clone()), Error::<Test>::VotingStillOngoing);
+        assert_noop!(Bullposting::try_end_post(RuntimeOrigin::signed(alice), post_url.clone()), Error::<Test>::VotingStillOngoing);
 
         // End voting period
         System::set_block_number(voting_period + 1);
 
         // Error if submit an empty input for the post
-        assert_noop!(Bullposting::try_end_voting(RuntimeOrigin::signed(alice), empty_post), Error::<Test>::Empty);
+        assert_noop!(Bullposting::try_end_post(RuntimeOrigin::signed(alice), empty_post), Error::<Test>::Empty);
 
         // Error if you submit a post that is longer than `MaxUrlLength`
-        assert_noop!(Bullposting::try_end_voting(RuntimeOrigin::signed(alice), too_long), Error::<Test>::InputTooLong);
+        assert_noop!(Bullposting::try_end_post(RuntimeOrigin::signed(alice), too_long), Error::<Test>::InputTooLong);
 
         // Error if submit an empty (or otherwise incorrect) input for the post
-        assert_noop!(Bullposting::try_end_voting(RuntimeOrigin::signed(alice), fake_post_url), Error::<Test>::PostDoesNotExist);
+        assert_noop!(Bullposting::try_end_post(RuntimeOrigin::signed(alice), fake_post_url), Error::<Test>::PostDoesNotExist);
 
         // Resolve the post
-        assert_ok!(Bullposting::try_end_voting(RuntimeOrigin::signed(alice), post_url.clone()));
+        assert_ok!(Bullposting::try_end_post(RuntimeOrigin::signed(alice), post_url.clone()));
         // Switch which of the below events is commented out and change `pub const RewardStyle: bool` in mock.rs
         // Rewarded event with RewardStyle = false (FlatReward)
         // System::assert_last_event(
@@ -316,10 +322,10 @@ fn test_try_end_voting() {
         );
 
         // Error if the post has already been resolved
-        assert_noop!(Bullposting::try_end_voting(RuntimeOrigin::signed(bob), post_url), Error::<Test>::PostAlreadyEnded);
+        assert_noop!(Bullposting::try_end_post(RuntimeOrigin::signed(bob), post_url), Error::<Test>::PostAlreadyEnded);
 
         // Post can be resolved by someone who is not the submitter
-        assert_ok!(Bullposting::try_end_voting(RuntimeOrigin::signed(bob), post_2_url.clone()));
+        assert_ok!(Bullposting::try_end_post(RuntimeOrigin::signed(bob), post_2_url.clone()));
         // Switch which of the below events is commented out and change `pub const SlashStyle: bool` in mock.rs
         // Slashed event with SlashStyle = false (FlatSlash)
         // System::assert_last_event(
@@ -373,7 +379,7 @@ fn test_try_resolve_post() {
 
         // End voting
         System::set_block_number(voting_period + 1);
-        assert_ok!(Bullposting::try_end_voting(RuntimeOrigin::signed(bob), post_url.clone()));
+        assert_ok!(Bullposting::try_end_post(RuntimeOrigin::signed(bob), post_url.clone()));
 
         // Error on empty post input
         assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), empty_post.clone()), Error::<Test>::Empty);
@@ -385,6 +391,76 @@ fn test_try_resolve_post() {
         assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), fake_post_url), Error::<Test>::PostDoesNotExist);
 
         // Successfully unfreeze a vote
+        assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()));
+        // Event
+        System::assert_last_event(
+            Event::PostResolved { 
+                id: post_id,
+            }.into()
+        );
+
+        // Check everything was removed from storage
+        assert!(!crate::Voters::<Test>::contains_key(post_id));
+        assert!(!crate::Votes::<Test>::contains_key(charlie, post_id));
+        assert!(!crate::Posts::<Test>::contains_key(post_id));
+        assert!(!crate::VoteCounts::<Test>::contains_key(post_id));
+    });
+}
+
+#[test]
+fn test_try_resolve_post_big() {
+    new_test_ext().execute_with(|| {
+        let alice = 0;
+        let bob = 1;
+        let charlie = 2;
+        let bond = 300;
+        let vote_amount = 500;
+        let voting_period = 1000;
+        let post_url: Vec<u8> = "https://paritytech.github.io/polkadot-sdk/master/sp_test_primitives/type.BlockNumber.html".into();
+        let post_id = sp_io::hashing::blake2_256(&post_url);
+        let empty_post: Vec<u8> = "".into();
+        let fake_post_url: Vec<u8> = "get rekt kid".into();
+        let too_long: Vec<u8> = [5; 2001].into();
+
+        // Go past genesis block so events get deposited
+        System::set_block_number(1);
+
+        // Submit post
+        assert_ok!(Bullposting::try_submit_post(RuntimeOrigin::signed(alice), post_url.clone(), bond));
+        // Vote on post
+        for i in 10..1500u64 {
+            Balances::set_balance(&i, vote_amount + 50);
+            let _ = Bullposting::try_submit_vote(RuntimeOrigin::signed(i), post_url.clone(), vote_amount, crate::Direction::Bullish);
+        }
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(bob), post_url.clone(), vote_amount, crate::Direction::Bullish));
+        assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bearish));
+
+        // Error if the post is not yet ended
+        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()), Error::<Test>::PostUnended);
+
+        // End voting
+        System::set_block_number(voting_period + 1);
+        assert_ok!(Bullposting::try_end_post(RuntimeOrigin::signed(bob), post_url.clone()));
+
+        // Error on empty post input
+        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), empty_post.clone()), Error::<Test>::Empty);
+
+        // Error if the post input is longer than `MaxUrlLength`
+        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), too_long), Error::<Test>::InputTooLong);
+
+        // Error if the post does not exist
+        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), fake_post_url), Error::<Test>::PostDoesNotExist);
+
+        // Successfully unfreeze some votes
+        assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()));
+        // Event
+        System::assert_last_event(
+            Event::PartiallyResolved { 
+                id: post_id,
+            }.into()
+        );
+
+        // Finish unfreezing
         assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()));
         // Event
         System::assert_last_event(

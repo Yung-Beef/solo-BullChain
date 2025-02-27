@@ -60,12 +60,12 @@ parameter_types! {
 	pub const SS58Prefix: u8 = 42;
 
     pub const RewardStyle: bool = true; // false = FlatReward, true = RewardCoefficient
-    pub const FlatReward: u32 = 500;
-    pub const RewardCoefficient: u32 = 100;
+    pub const FlatReward: u32 = 500; // if Alice bonds any amount of tokens she will be rewarded with 500 more
+    pub const RewardCoefficient: u32 = 100; // if Alice bonds 400 tokens she will be rewarded with 400 more
     pub const SlashStyle: bool = true; // false = FlatSlash, true = SlashCoefficient
-    pub const FlatSlash: u32 = 500;
-    pub const SlashCoefficient: u8 = 100;
-	pub const VotingPeriod: BlockNumber = 100;
+    pub const FlatSlash: u32 = 500; // if Alice bonds any amount of tokens (at least `BondMinimum`) she will be slashed 500
+    pub const SlashCoefficient: u8 = 100; // if Alice bonds 500 tokens she will lose 100% of them
+	pub const VotingPeriod: BlockNumber = 20;
     pub const BondMinimum: u32 = 500;
 	pub const VoteMinimum: u32 = 500;
     pub const MaxVoters: u32 = 10000;
