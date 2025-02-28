@@ -61,7 +61,7 @@ impl pallet_bullposting::Config for Test {
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type RuntimeFreezeReason = RuntimeFreezeReason;
-    type FreezeIdentifier = ();
+    type FreezeIdentifier = RuntimeFreezeReason;
     type RewardStyle = RewardStyle;
     type FlatReward = FlatReward;
     type RewardCoefficient = RewardCoefficient;

@@ -1,6 +1,6 @@
 [package]
 name = "pallet-bullposting"
-description = "FRAME pallet template for defining custom runtime logic."
+description = "FRAME pallet bullposting."
 version = "0.1.0"
 license = "Unlicense"
 authors.workspace = true
@@ -23,7 +23,7 @@ frame-benchmarking = { optional = true, workspace = true }
 frame-support.workspace = true
 frame-system.workspace = true
 sp-io = { default-features = false, workspace = true }
-pallet-balances = { version = "39.0.0", default-features = false }
+pallet-balances = { version = "40.0.1", default-features = false }
 
 [dev-dependencies]
 sp-core = { default-features = true, workspace = true }

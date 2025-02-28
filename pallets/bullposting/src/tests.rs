@@ -1,6 +1,6 @@
 use crate::{mock::*, Error, Event};
 use frame_support::{assert_noop, assert_ok};
-use frame_support::traits::fungible::{Inspect, Mutate};
+use frame_support::traits::fungible::{Inspect, InspectHold, Mutate, InspectFreeze};
 use frame_support::traits::tokens::{Preservation, Fortitude};
 
 
@@ -58,8 +58,7 @@ fn test_try_submit_post() {
         );
         
         // Tokens bonded (the 100 is the StorageRent)
-        assert_eq!(Balances::free_balance(alice), balance - bond - 100);
-        assert_eq!(Balances::reducible_balance(&alice, Preservation::Preserve, Fortitude::Polite), 600);
+        assert_eq!(Balances::total_balance_on_hold(&alice), bond + 100);
 
         // Cannot resubmit an existing post
         assert_eq!(Balances::free_balance(bob), balance);

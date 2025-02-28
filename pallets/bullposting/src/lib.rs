@@ -158,8 +158,10 @@ pub mod pallet {
 	#[pallet::composite_enum]
 	pub enum HoldReason {
         /// Bond of a post
+        #[codec(index = 0)]
         PostBond,
         // Locked for storage rent, unlockable after voting ends
+        #[codec(index = 1)]
         StorageRent,
 	}
 
@@ -167,6 +169,7 @@ pub mod pallet {
 	#[pallet::composite_enum]
 	pub enum FreezeReason {
         /// Voting
+        #[codec(index = 0)]
         Vote,
 	}
 
@@ -519,10 +522,10 @@ pub mod pallet {
             reduc_bal.checked_sub(&storage_rent.into()).ok_or(Error::<T>::InsufficientFreeBalance)?;
 
             // Bonds the submitter's balance
-            T::NativeBalance::hold(&HoldReason::PostBond.into(), &who, bond)?;
+            <<T as Config>::NativeBalance>::hold(&HoldReason::PostBond.into(), &who, bond)?;
 
             // Holds the storage rent
-            T::NativeBalance::hold(&HoldReason::StorageRent.into(), &who, storage_rent.into())?;
+            <<T as Config>::NativeBalance>::hold(&HoldReason::StorageRent.into(), &who, storage_rent.into())?;
 
             let voting_until = frame_system::Pallet::<T>::block_number() +
             T::VotingPeriod::get();
@@ -749,7 +752,7 @@ pub mod pallet {
             let bond = post_struct.bond;
 
             // Unlock submitter's bond
-            T::NativeBalance::release(&HoldReason::PostBond.into(), &submitter, bond, Precision::BestEffort)?;
+            <<T as Config>::NativeBalance>::release(&HoldReason::PostBond.into(), &submitter, bond, Precision::BestEffort)?;
 
             let result: Direction = if updated_post_struct.bull_votes > updated_post_struct.bear_votes {
                 Direction::Bullish
@@ -807,7 +810,7 @@ pub mod pallet {
             let reward = T::FlatReward::get().into();
 
             // Reward the submitter
-            T::NativeBalance::mint_into(&who, reward)?;
+            <<T as Config>::NativeBalance>::mint_into(&who, reward)?;
 
             Ok(reward)
         }
@@ -817,7 +820,7 @@ pub mod pallet {
             let reward = Permill::from_percent(T::RewardCoefficient::get()) * *bond;
 
             // Reward the submitter
-            T::NativeBalance::mint_into(&who, reward)?;
+            <<T as Config>::NativeBalance>::mint_into(&who, reward)?;
 
             Ok(reward)
         }
@@ -827,7 +830,7 @@ pub mod pallet {
             let slash = T::FlatSlash::get().into();
 
             // Slash the submitter
-            T::NativeBalance::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+            <<T as Config>::NativeBalance>::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
 
             Ok(slash)
         }
@@ -843,7 +846,7 @@ pub mod pallet {
             let slash = Percent::from_percent(percent) * *bond;
             
             // Slashes the submitter
-            T::NativeBalance::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+            <<T as Config>::NativeBalance>::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
             
             Ok(slash)
         }
@@ -884,7 +887,7 @@ pub mod pallet {
 
             if all_unfrozen {
                 // Unlock the storage rent of the submitter
-                T::NativeBalance::release(&HoldReason::StorageRent.into(), &post_struct.submitter, T::StorageRent::get().into(), Precision::BestEffort)?;
+                <<T as Config>::NativeBalance>::release(&HoldReason::StorageRent.into(), &post_struct.submitter, T::StorageRent::get().into(), Precision::BestEffort)?;
 
                 // Remove from Posts storage
                 let _ = Posts::<T>::take(id);
