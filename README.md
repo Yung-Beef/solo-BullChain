@@ -45,7 +45,7 @@ After you build the project, you can use the following command to explore its
 parameters and subcommands:
 
 ```sh
-./target/release/solochain-template-node -h
+./target/release/solochain-bullposting-node -h
 ```
 
 You can generate and view the [Rust
@@ -62,19 +62,19 @@ The following command starts a single-node development chain that doesn't
 persist state:
 
 ```sh
-./target/release/solochain-template-node --dev
+./target/release/solochain-bullposting-node --dev
 ```
 
 To purge the development chain's state, run the following command:
 
 ```sh
-./target/release/solochain-template-node purge-chain --dev
+./target/release/solochain-bullposting-node purge-chain --dev
 ```
 
 To start the development chain with detailed logging, run the following command:
 
 ```sh
-RUST_BACKTRACE=1 ./target/release/solochain-template-node -ldebug --dev
+RUST_BACKTRACE=1 ./target/release/solochain-bullposting-node -ldebug --dev
 ```
 
 Development chains:
@@ -94,7 +94,7 @@ similar to the following:
 $ mkdir my-chain-state
 
 // Use of that folder to store the chain state
-$ ./target/release/solochain-template-node --dev --base-path ./my-chain-state/
+$ ./target/release/solochain-bullposting-node --dev --base-path ./my-chain-state/
 
 // Check the folder structure created inside the base path after running the chain
 $ ls ./my-chain-state
@@ -195,7 +195,7 @@ The runtime in this project is constructed using many FRAME pallets that ship
 with [the Substrate
 repository](https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame) and a
 template pallet that is [defined in the
-`pallets`](./pallets/template/src/lib.rs) directory.
+`pallets`](./pallets/bullposting/src/lib.rs) directory.
 
 A FRAME pallet is comprised of a number of blockchain primitives, including:
 

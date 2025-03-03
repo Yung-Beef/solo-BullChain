@@ -1,5 +1,5 @@
 //! Benchmarking setup for pallet-bullposting
-#![cfg(feature = "runtime-benchmarks")]
+
 use super::*;
 
 #[allow(unused)]

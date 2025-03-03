@@ -5986,9 +5986,9 @@ dependencies = [
 
 [[package]]
 name = "pallet-balances"
-version = "40.0.0"
+version = "40.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5800e106650e41577d852e003a212b82998bb2fd1e348ed08436ef620fd094f"
+checksum = "8b3d18caaae72674d6536d339c1ae5b5063b55de5813a43ee045847d28c0a128"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -5997,6 +5997,21 @@ dependencies = [
  "log",
  "parity-scale-codec",
  "scale-info",
+ "sp-runtime",
+]
+
+[[package]]
+name = "pallet-bullposting"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
  "sp-runtime",
 ]
 
@@ -6057,20 +6072,6 @@ dependencies = [
  "frame-system",
  "parity-scale-codec",
  "scale-info",
- "sp-io",
- "sp-runtime",
-]
-
-[[package]]
-name = "pallet-template"
-version = "0.1.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-core",
  "sp-io",
  "sp-runtime",
 ]
@@ -9586,7 +9587,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "solochain-template-node"
+name = "solochain-bullposting-node"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -9611,7 +9612,7 @@ dependencies = [
  "sc-transaction-pool",
  "sc-transaction-pool-api",
  "serde_json",
- "solochain-template-runtime",
+ "solochain-bullposting-runtime",
  "sp-api",
  "sp-block-builder",
  "sp-blockchain",
@@ -9629,7 +9630,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "solochain-template-runtime"
+name = "solochain-bullposting-runtime"
 version = "0.1.0"
 dependencies = [
  "frame-benchmarking",
@@ -9642,9 +9643,9 @@ dependencies = [
  "frame-try-runtime",
  "pallet-aura",
  "pallet-balances",
+ "pallet-bullposting",
  "pallet-grandpa",
  "pallet-sudo",
- "pallet-template",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
