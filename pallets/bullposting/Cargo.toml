@@ -22,6 +22,7 @@ scale-info = { features = [
 frame-benchmarking = { optional = true, workspace = true }
 frame-support.workspace = true
 frame-system.workspace = true
+sp-io = { default-features = true, workspace = true }
 pallet-balances = { version = "40.0.1", default-features = false }
 
 [dev-dependencies]
@@ -37,6 +38,7 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"scale-info/std",
+	"sp-io/std",
 	"pallet-balances/std",
 ]
 runtime-benchmarks = [
