@@ -1,6 +1,6 @@
 [package]
 name = "pallet-bullposting"
-description = "FRAME pallet bullposting."
+description = "A FRAME pallet for bullposting."
 version = "0.1.0"
 license = "Unlicense"
 authors.workspace = true

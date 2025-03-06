@@ -1,35 +1,22 @@
-# Substrate Node Template
+Based on the [Polkadot SDK Solochain Template](https://github.com/paritytech/polkadot-sdk-solochain-template).
 
-A fresh [Substrate](https://substrate.io/) node, ready for hacking :rocket:
+# BullChain
 
-A standalone version of this template is available for each release of Polkadot
-in the [Substrate Developer Hub Parachain
-Template](https://github.com/substrate-developer-hub/substrate-node-template/)
-repository. The parachain template is generated directly at each Polkadot
-release branch from the [Solochain Template in
-Substrate](https://github.com/paritytech/polkadot-sdk/tree/master/templates/solochain)
-upstream
+BullChain is a practice project without any intended real-world use or serious tokenomics.
 
-It is usually best to use the stand-alone version to start a new project. All
-bugs, suggestions, and feature requests should be made upstream in the
-[Substrate](https://github.com/paritytech/polkadot-sdk/tree/master/substrate)
-repository.
+The heart of BullChain is `pallet-bullposting`, which is loosely coupled to `pallet-balances`.
 
-## Getting Started
+Through the Bullposting pallet's extrinsics, a user can submit a post (in the form of a string), along with bonding some tokens.
+Other users of the chain can vote on this submission (during the voting period) by freezing some tokens.
 
-Depending on your operating system and Rust version, there might be additional
-packages required to compile this template. Check the
-[Install](https://docs.substrate.io/install/) instructions for your platform for
-the most common dependencies. Alternatively, you can use one of the [alternative
-installation](#alternatives-installations) options.
+Once the voting period ends, the result will be determined to be Bullish, Bearish, or a tie. 
+Ties result in no change, and the effects of Bullish or Bearish are configurable in the runtime 
+(eg. reward the submitter with +50% of their bond, or slash 100% of their bond). Voters receive no reward for voting.
 
-Fetch solochain template code:
-
-```sh
-git clone https://github.com/paritytech/polkadot-sdk-solochain-template.git solochain-template
-
-cd solochain-template
-```
+Once the voting period has ended, anyone can end the post with `end_post()`, calculating the final verdict and rewarding/penalizing 
+the submitter accordingly. Following this, anyone can resolve the post, unfreezing the votes of voters. The maximum 
+number of votes that can be unfrozen per attempt is defined in the runtime. Users may need to call `resolve_post()` 
+multiple times to fully unfreeze all votes on a post.
 
 ### Build
 
