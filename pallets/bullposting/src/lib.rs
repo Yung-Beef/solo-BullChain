@@ -136,7 +136,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxUrlLength: Get<u32>;
 
-        /// The maximum amount of unfreezes that can be done per `try_resolve_post`.
+        /// The maximum amount of unfreezes that can be done per `try_resolve_voting`.
         #[pallet::constant]
         type UnfreezeLimit: Get<u32>;
 
@@ -483,8 +483,8 @@ pub mod pallet {
         /// - If the post does not exist ([`Error::PostDoesNotExist`])
         /// - If the post is unended ([`Error::PostUnended`])
         #[pallet::call_index(4)]
-        #[pallet::weight(T::WeightInfo::try_resolve_post(T::UnfreezeLimit::get()))]
-        pub fn try_resolve_post(
+        #[pallet::weight(T::WeightInfo::try_resolve_voting(T::UnfreezeLimit::get()))]
+        pub fn try_resolve_voting(
             origin: OriginFor<T>,
             post_url: Vec<u8>,
         ) -> DispatchResultWithPostInfo {
@@ -780,7 +780,7 @@ pub mod pallet {
             } else if result == Direction::Bearish {
                 // Slashes the submitter
                 let slashed = match T::SlashStyle::get() {
-                    false => Self::slash_flat(&submitter)?,
+                    false => Self::slash_flat(&submitter, bond)?,
                     true => Self::slash_coefficient(&submitter, &bond)?,
                 };
 
@@ -826,13 +826,17 @@ pub mod pallet {
         }
 
         // Slash a flat amount
-        pub(crate) fn slash_flat(who: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
-            let slash = T::FlatSlash::get().into();
-
-            // Slash the submitter
-            <<T as Config>::NativeBalance>::burn_from(&who, slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
-
-            Ok(slash)
+        pub(crate) fn slash_flat(who: &T::AccountId, bond: BalanceOf<T>) -> Result<BalanceOf<T>, DispatchError> {
+            let flat_slash = T::FlatSlash::get().into();
+            
+            // Slash the submitter up to their full bond amount, but not beyond
+            if bond < flat_slash {
+                <<T as Config>::NativeBalance>::burn_from(&who, bond, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+                Ok(bond)
+            } else {
+                <<T as Config>::NativeBalance>::burn_from(&who, flat_slash, Preservation::Protect, Precision::BestEffort, Fortitude::Force)?;
+                Ok(flat_slash)
+            }
         }
 
         // Slash based on a coefficient and how much they bonded
@@ -896,7 +900,7 @@ pub mod pallet {
                 Self::deposit_event(Event::PostResolved {
                     id,
                 });
-                Ok(Some(T::WeightInfo::try_resolve_post(unfreeze_count)).into())
+                Ok(Some(T::WeightInfo::try_resolve_voting(unfreeze_count)).into())
             } else {
                 Self::deposit_event(Event::PartiallyResolved {
                     id,

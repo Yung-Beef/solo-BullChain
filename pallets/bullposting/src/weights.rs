@@ -41,7 +41,7 @@ pub trait WeightInfo {
 	fn try_submit_vote() -> Weight;
 	fn try_update_vote() -> Weight;
 	fn try_end_post() -> Weight;
-	fn try_resolve_post(x: u32, ) -> Weight;
+	fn try_resolve_voting(x: u32, ) -> Weight;
 }
 
 /// Weights for `pallet_bullposting` using the Substrate node and recommended hardware.
@@ -134,7 +134,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(85), added: 2560, mode: `MaxEncodedLen`)
 	/// The range of component `x` is `[1, 10000]`.
-	fn try_resolve_post(x: u32, ) -> Weight {
+	fn try_resolve_voting(x: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `322670 + x * (84 ±0)`
 		//  Estimated: `2472363 + x * (185 ±71)`
@@ -237,7 +237,7 @@ impl WeightInfo for () {
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(85), added: 2560, mode: `MaxEncodedLen`)
 	/// The range of component `x` is `[1, 10000]`.
-	fn try_resolve_post(x: u32, ) -> Weight {
+	fn try_resolve_voting(x: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `322670 + x * (84 ±0)`
 		//  Estimated: `2472363 + x * (185 ±71)`

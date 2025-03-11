@@ -350,7 +350,7 @@ fn test_try_end_post() {
 }
 
 #[test]
-fn test_try_resolve_post() {
+fn try_resolve_voting() {
     new_test_ext().execute_with(|| {
         let alice = 0;
         let bob = 1;
@@ -374,23 +374,23 @@ fn test_try_resolve_post() {
         assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bearish));
 
         // Error if the post is not yet ended
-        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()), Error::<Test>::PostUnended);
+        assert_noop!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), post_url.clone()), Error::<Test>::PostUnended);
 
         // End voting
         System::set_block_number(voting_period + 1);
         assert_ok!(Bullposting::try_end_post(RuntimeOrigin::signed(bob), post_url.clone()));
 
         // Error on empty post input
-        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), empty_post.clone()), Error::<Test>::Empty);
+        assert_noop!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), empty_post.clone()), Error::<Test>::Empty);
 
         // Error if the post input is longer than `MaxUrlLength`
-        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), too_long), Error::<Test>::InputTooLong);
+        assert_noop!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), too_long), Error::<Test>::InputTooLong);
 
         // Error if the post does not exist
-        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), fake_post_url), Error::<Test>::PostDoesNotExist);
+        assert_noop!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), fake_post_url), Error::<Test>::PostDoesNotExist);
 
         // Successfully unfreeze a vote
-        assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()));
+        assert_ok!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), post_url.clone()));
         // Event
         System::assert_last_event(
             Event::PostResolved { 
@@ -407,7 +407,7 @@ fn test_try_resolve_post() {
 }
 
 #[test]
-fn test_try_resolve_post_big() {
+fn test_try_resolve_voting_big() {
     new_test_ext().execute_with(|| {
         let alice = 0;
         let bob = 1;
@@ -435,23 +435,23 @@ fn test_try_resolve_post_big() {
         assert_ok!(Bullposting::try_submit_vote(RuntimeOrigin::signed(charlie), post_url.clone(), vote_amount, crate::Direction::Bearish));
 
         // Error if the post is not yet ended
-        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()), Error::<Test>::PostUnended);
+        assert_noop!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), post_url.clone()), Error::<Test>::PostUnended);
 
         // End voting
         System::set_block_number(voting_period + 1);
         assert_ok!(Bullposting::try_end_post(RuntimeOrigin::signed(bob), post_url.clone()));
 
         // Error on empty post input
-        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), empty_post.clone()), Error::<Test>::Empty);
+        assert_noop!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), empty_post.clone()), Error::<Test>::Empty);
 
         // Error if the post input is longer than `MaxUrlLength`
-        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), too_long), Error::<Test>::InputTooLong);
+        assert_noop!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), too_long), Error::<Test>::InputTooLong);
 
         // Error if the post does not exist
-        assert_noop!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), fake_post_url), Error::<Test>::PostDoesNotExist);
+        assert_noop!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), fake_post_url), Error::<Test>::PostDoesNotExist);
 
         // Successfully unfreeze some votes
-        assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()));
+        assert_ok!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), post_url.clone()));
         // Event
         System::assert_last_event(
             Event::PartiallyResolved { 
@@ -460,7 +460,7 @@ fn test_try_resolve_post_big() {
         );
 
         // Finish unfreezing
-        assert_ok!(Bullposting::try_resolve_post(RuntimeOrigin::signed(bob), post_url.clone()));
+        assert_ok!(Bullposting::try_resolve_voting(RuntimeOrigin::signed(bob), post_url.clone()));
         // Event
         System::assert_last_event(
             Event::PostResolved { 

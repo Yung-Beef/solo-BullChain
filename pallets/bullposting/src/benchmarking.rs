@@ -147,7 +147,7 @@ mod benchmarks {
 	}
 
 	#[benchmark]
-    fn try_resolve_post<T: Config>(
+    fn try_resolve_voting<T: Config>(
 		x: Linear<1, MAX_VOTERS>
 	) -> Result<(), BenchmarkError> {
 		let post: Vec<u8> = [255u8; MAX_URL].to_vec();
@@ -180,7 +180,7 @@ mod benchmarks {
 		BullPosting::<T>::try_end_post(RawOrigin::Signed(bob.clone()).into(), post.clone())?;
 
         #[extrinsic_call]
-		try_resolve_post(RawOrigin::Signed(bob.clone()), post);
+		try_resolve_voting(RawOrigin::Signed(bob.clone()), post);
 
 		// assert that the post is partially or fully resolved
 		if x >= 1000 {
